@@ -1,0 +1,10 @@
+.taste-skill/*
+!.taste-skill/direction.json
+reports/
+node_modules/
+dist/
+.playwright-cli/
+*.log
+.env
+.env.*
+!.env.example

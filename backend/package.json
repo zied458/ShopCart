@@ -1,0 +1,23 @@
+{
+  "name": "tropicline-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tropic Line ShopCart API (deliberately vulnerable starting point, see docs/vulnerabilities.md)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:init": "node db/init.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "4.17.11",
+    "pg": "^8.16.0"
+  }
+}

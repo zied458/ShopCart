@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/*
+  Tropic Line tokens.
+  Proportions from the dealt "Frost and slate" palette (one ground, one ink, one accent, one field),
+  colours taken from the subject: roasted bean for ink, ripe coffee cherry for the accent.
+*/
+:root {
+  --bg: #efeeeb;
+  --surface: #e3e1dd;
+  --ink: #21170f;
+  --muted: #64574d;
+  --accent: #a3172c;
+  --accent-ink: #ffffff;
+  --field: #21170f;
+  --field-ink: #efeeeb;
+  --field-muted: #c9bfb4;
+  /* edge of form controls: 3:1 or more against bg and surface (Apple HIG / WCAG 1.4.11) */
+  --edge: #7f746b;
+  --scrim: rgb(12 8 5 / 0.6);
+  /* the brew slip is a printed receipt: paper in both appearances */
+  --paper: #efeeeb;
+  --paper-ink: #21170f;
+
+  color-scheme: light dark;
+
+  --step-small: 1rem;
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2rem, 1.2rem + 3vw, 3.75rem);
+  --step-display: clamp(2.75rem, 1.6rem + 4.2vw, 5.25rem);
+
+  --margin: clamp(20px, 2vw, 32px);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* names the 21st.dev drawer reads */
+  --border: var(--surface);
+  --foreground: var(--ink);
+  --muted-foreground: var(--muted);
+  --card: var(--bg);
+}
+
+/* Dark appearance: the same roast palette, inverted. Every text pair checked at 4.5:1 or more. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16110d;
+    --surface: #231b15;
+    --ink: #ebeae7;
+    --muted: #b9ab9d;
+    --accent: #ea5a6c;
+    --accent-ink: #16110d;
+    --field: #2b211a;
+    --field-ink: #ebeae7;
+    --field-muted: #c9bcae;
+    --edge: #7d7268;
+  }
+}
+
+/* Increase Contrast: secondary text and control edges move to the full ink. */
+@media (prefers-contrast: more) {
+  :root {
+    --muted: color-mix(in srgb, var(--ink) 85%, var(--bg));
+    --edge: var(--ink);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-field: var(--field);
+  --color-field-ink: var(--field-ink);
+  --color-field-muted: var(--field-muted);
+  --color-paper: var(--paper);
+  --color-paper-ink: var(--paper-ink);
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --text-small: var(--step-small);
+  --text-body: var(--step-body);
+  --text-lead: var(--step-lead);
+  --text-head: var(--step-head);
+  --text-display: var(--step-display);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 100%;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    font-size: var(--step-body);
+    line-height: 1.5;
+    min-height: 100svh;
+  }
+  h1, h2, h3, h4 {
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  p { text-wrap: pretty; }
+  ::selection { background: var(--ink); color: var(--bg); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  img { display: block; max-width: 100%; }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@layer components {
+  /* the sack stripe: alternating bars of ink and paper */
+  .stripe {
+    display: flex;
+    overflow: hidden;
+  }
+  .stripe > span { flex: 0 0 28px; background: var(--ink); }
+  .stripe > span:nth-child(even) { background: transparent; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 52px;
+    padding: 0 1.5rem;
+    font-weight: 600;
+    font-size: var(--step-small);
+    background: var(--ink);
+    color: var(--bg);
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transition: transform 160ms var(--ease-out), background-color 200ms;
+  }
+  .btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--accent);
+    transform: translateY(101%);
+    transition: transform 320ms var(--ease-out);
+  }
+  .btn:hover::before { transform: translateY(0); }
+  .btn:active { transform: scale(0.97); }
+  .btn-accent { background: var(--accent); color: var(--accent-ink); }
+  .btn-accent::before { background: var(--ink); }
+  .btn-quiet { background: var(--surface); color: var(--ink); }
+  .btn-quiet::before { background: var(--ink); opacity: 0.08; }
+  .btn:disabled { opacity: 0.5; pointer-events: none; }
+
+  /* Apple HIG: every control gets at least a 44 × 44 touch area, centred, without changing the layout. */
+  .tap { position: relative; }
+  .tap::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  .link { position: relative; }
+  .link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 2px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 260ms var(--ease-out);
+  }
+  .link:hover::after, .link[aria-current="page"]::after, .link.is-active::after { transform: scaleX(1); }
+
+  .field {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 1rem;
+    background: var(--bg);
+    border: 2px solid var(--edge);
+    color: var(--ink);
+    font-size: var(--step-body);
+    transition: border-color 160ms;
+  }
+  .field:hover { border-color: color-mix(in srgb, var(--ink) 60%, var(--edge)); }
+  .field:focus { outline: none; border-color: var(--ink); }
+  .field[aria-invalid="true"] { border-color: var(--accent); }
+
+  .leader {
+    flex: 1;
+    min-width: 1.5rem;
+    height: 4px;
+    margin: 0 0.5rem;
+    align-self: center;
+    /* dots drawn in the current text colour, so they follow light and dark appearance */
+    background-color: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%279%27 height=%274%27%3E%3Ccircle cx=%272%27 cy=%272%27 r=%271.7%27/%3E%3C/svg%3E") left center / 9px 4px repeat-x;
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

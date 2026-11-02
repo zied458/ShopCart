@@ -1,0 +1,191 @@
+# Tropic Line CI: build, then a blocking security stage, then publish.
+# Blocking rules and exceptions: docs/pipeline-policy.md.
+# The same checks run locally with scripts/security-scan.sh.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Scanners run as pinned container images instead of third-party actions.
+  TRIVY_IMAGE: aquasec/trivy:0.76.1
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
+  SEMGREP_IMAGE: semgrep/semgrep:1.182.1
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: API — install and syntax check
+        working-directory: backend
+        run: |
+          npm ci --ignore-scripts
+          find src db -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Shop — install, type check and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  # ---------------------------------------------------------------- security stage
+  secrets:
+    name: "Security · Secrets (Gitleaks)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the whole history, not only the last commit
+          persist-credentials: false
+      - name: Scan every commit for secrets (values redacted)
+        run: |
+          mkdir -p reports
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner \
+            --report-format sarif --report-path /repo/reports/gitleaks.sarif --exit-code 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: gitleaks-report
+          path: reports/
+
+  sast:
+    name: "Security · Code (Semgrep)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Static analysis
+        run: |
+          mkdir -p reports
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/default --config .semgrep/ --metrics=off \
+            --sarif-output=reports/semgrep.sarif --json-output=reports/semgrep.json backend/src frontend/src
+      - name: Block on ERROR findings
+        run: |
+          jq -r '.results[] | "\(.extra.severity)\t\(.check_id | split(".") | last)\t\(.path):\(.start.line)"' reports/semgrep.json | sort
+          errors=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' reports/semgrep.json)
+          echo "Blocking findings (ERROR): $errors"
+          test "$errors" -eq 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: semgrep-report
+          path: reports/
+
+  dependencies:
+    name: "Security · Dependencies (Trivy)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Full report (all severities)
+        run: |
+          mkdir -p reports
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln \
+            --format sarif --output reports/dependencies.sarif .
+      - name: Block on HIGH and CRITICAL with a fix available
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore --exit-code 1 .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dependencies-report
+          path: reports/
+
+  iac:
+    name: "Security · Deployment files (Trivy config)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dockerfiles and Kubernetes manifests
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config \
+            --skip-dirs node_modules --severity HIGH,CRITICAL --exit-code 1 .
+
+  image:
+    name: "Security · Images (Trivy)"
+    runs-on: ubuntu-24.04
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker build -t "tropicline-${{ matrix.service }}:ci" "${{ matrix.service }}"
+      - name: Runs as a non-root user
+        run: |
+          user=$(docker image inspect "tropicline-${{ matrix.service }}:ci" --format '{{.Config.User}}')
+          echo "Image user: '${user}'"
+          case "${user%%:*}" in ""|root|0) echo "::error::The image runs as root"; exit 1;; esac
+      - name: Block on vulnerable packages or secrets in the image
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src" -w /src "$TRIVY_IMAGE" image \
+            --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore \
+            --exit-code 1 "tropicline-${{ matrix.service }}:ci"
+
+  # ---------------------------------------------------------------- publish
+  publish:
+    name: Publish images
+    runs-on: ubuntu-24.04
+    needs: [secrets, sast, dependencies, iac, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.service == 'backend' && 'api' || 'web' }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.service }}
+          push: true
+          provenance: true
+          sbom: true
+          tags: |
+            ${{ steps.name.outputs.image }}:${{ github.sha }}
+            ${{ steps.name.outputs.image }}:main
+
+  # Dynamic testing (OWASP ZAP, authenticated) runs after deployment to the test cluster: added with the Kubernetes step.

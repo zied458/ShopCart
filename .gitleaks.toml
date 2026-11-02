@@ -1,0 +1,29 @@
+# Gitleaks configuration: all default rules, plus rules for this project's own secrets.
+title = "Tropic Line secret scanning"
+
+[extend]
+useDefault = true
+
+# Tropic Line signing keys follow the pattern tl_<env>_<purpose>_<32 hex>.
+[[rules]]
+id = "tropicline-signing-key"
+description = "Tropic Line signing key"
+regex = '''\btl_(?:live|test)_[a-z]+_[0-9a-f]{32}\b'''
+keywords = ["tl_live_", "tl_test_"]
+
+# Database connection strings with an inline password.
+[[rules]]
+id = "postgres-url-with-password"
+description = "PostgreSQL connection string with a password"
+regex = '''postgres(?:ql)?://[^:\s'"/]+:([^@\s'"]{6,})@'''
+secretGroup = 1
+keywords = ["postgres://", "postgresql://"]
+
+[allowlist]
+description = "Generated and third-party files"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)\.taste-skill/''',
+  '''(^|/)package-lock\.json$''',
+]

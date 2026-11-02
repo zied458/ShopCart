@@ -1,0 +1,98 @@
+# Team rules for the Tropic Line stack (Express + node-postgres + React + JWT).
+# They complement the public registry rules (p/default), which do not follow request data into
+# node-postgres queries. Severity ERROR breaks the build (see docs/pipeline-policy.md).
+rules:
+  - id: express-request-data-in-sql-string
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Request data reaches a SQL string that is passed to the database. Use a parameterised query
+      ($1, $2…) and pass the values separately.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A05:2025 Injection"
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.body
+          - pattern: $REQ.params
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: query($SQL, ...)
+              - pattern: $DB.query($SQL, ...)
+          - focus-metavariable: $SQL
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: Number.parseInt(...)
+
+  - id: react-html-from-variable
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      HTML from a variable is inserted with dangerouslySetInnerHTML. If the value can come from a user,
+      this is cross-site scripting. Render it as text, or sanitise it with a vetted library.
+    metadata:
+      cwe: "CWE-79: Cross-site Scripting"
+      owasp: "A05:2025 Injection"
+    patterns:
+      - pattern: '<$EL dangerouslySetInnerHTML={{__html: $X}} />'
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            - pattern-not: '"..."'
+
+  - id: hardcoded-secret-fallback
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A secret falls back to a value written in the code when the environment variable is missing.
+      Fail at start-up instead, and provide the secret at runtime.
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A04:2025 Cryptographic Failures"
+    patterns:
+      - pattern-either:
+          - pattern: "{..., $KEY: process.env.$ENV ?? '$VALUE', ...}"
+          - pattern: "{..., $KEY: process.env.$ENV || '$VALUE', ...}"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(secret|password|token|key|databaseurl).*
+
+  - id: role-taken-from-request
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The account role is read from the request. A user can grant themselves a higher role.
+      Set the role on the server.
+    metadata:
+      cwe: "CWE-915: Mass Assignment"
+      owasp: "A01:2025 Broken Access Control"
+    pattern-either:
+      - pattern: $REQ.body.role
+      - pattern: $REQ.body["role"]
+
+  - id: error-details-sent-to-client
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      An error's stack trace is sent in the HTTP response. Log it with a correlation id and send a
+      generic message.
+    metadata:
+      cwe: "CWE-209: Information Exposure Through an Error Message"
+      owasp: "A10:2025 Mishandling of Exceptional Conditions"
+    pattern-either:
+      - pattern: '$RES.json({..., stack: $E.stack, ...})'
+      - pattern: '$RES.status($S).json({..., stack: $E.stack, ...})'
+
+  - id: cors-allows-every-origin
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      cors() without options answers every origin with Access-Control-Allow-Origin: *. List the
+      origins that may call the API.
+    metadata:
+      cwe: "CWE-942: Permissive Cross-domain Policy"
+      owasp: "A02:2025 Security Misconfiguration"
+    pattern: $APP.use(cors())

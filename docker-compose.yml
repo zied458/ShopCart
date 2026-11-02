@@ -1,0 +1,56 @@
+# Local stack. Own project name so it never touches other "shopcart" containers.
+#   docker compose up -d db        database only (for npm run dev)
+#   docker compose up -d --build   database + API + shop on http://localhost:8081
+name: tropicline
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tropicline
+      POSTGRES_USER: tropicline
+      # Development-only credentials (see docs/vulnerabilities.md, V6)
+      POSTGRES_PASSWORD: ***
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tropicline -d tropicline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *hardened
+    build: ./backend
+    image: tropicline-api:dev
+    environment:
+      DATABASE_URL: postgres://tropicline:***@db:5432/tropicline
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *hardened
+    build: ./frontend
+    image: tropicline-web:dev
+    environment:
+      API_UPSTREAM: http://api:3000
+    ports:
+      - "127.0.0.1:8081:8080"
+    tmpfs:
+      # nginx (user 101) renders its config and keeps temp files here; the rest of the filesystem is read-only.
+      - /tmp:uid=101,gid=101,mode=0755
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+    depends_on:
+      - api
+
+volumes:
+  dbdata:

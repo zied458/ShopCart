@@ -1,0 +1,52 @@
+[
+ {
+  "file": "public/video/kodagu-cherries.webm",
+  "media": "video",
+  "poster": "public/video/kodagu-cherries-poster.jpg",
+  "ref": "commons:29867297",
+  "title": "Ripen coffee fruits, Kodagu, Karnataka",
+  "creator": "Subhashish Panigrahi",
+  "creatorUrl": null,
+  "date": "2013-11-26",
+  "license": "CC BY-SA 3.0",
+  "licenseCode": "by-sa",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+  "creditRequired": true,
+  "page": "https://commons.wikimedia.org/wiki/File:Ripen_coffee_fruits,_Kodagu,_Karnataka.webm",
+  "via": "Wikimedia Commons",
+  "video": "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c2/Ripen_coffee_fruits%2C_Kodagu%2C_Karnataka.webm/Ripen_coffee_fruits%2C_Kodagu%2C_Karnataka.webm.480p.vp9.webm",
+  "width": 854,
+  "height": 480,
+  "duration": 50.7,
+  "bytes": 6312789,
+  "credit": "\"Ripen coffee fruits, Kodagu, Karnataka\" by Subhashish Panigrahi, CC BY-SA 3.0, via Wikimedia Commons",
+  "notes": [
+   "Share-alike: an altered version (recoloured, combined with other pictures) must be shared under the same licence."
+  ],
+  "saved": "2026-11-02T14:17:01.115Z"
+ },
+ {
+  "file": "public/video/bean-sorter.webm",
+  "media": "video",
+  "poster": "public/video/bean-sorter-poster.jpg",
+  "ref": "commons:138576098",
+  "title": "Color sorter coffeebeans",
+  "creator": "AlexanderKlink",
+  "creatorUrl": null,
+  "date": "2023-09-13",
+  "license": "CC0",
+  "licenseCode": "cc0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/deed.en",
+  "creditRequired": false,
+  "page": "https://commons.wikimedia.org/wiki/File:Color_sorter_coffeebeans.webm",
+  "via": "Wikimedia Commons",
+  "video": "https://upload.wikimedia.org/wikipedia/commons/transcoded/0/05/Color_sorter_coffeebeans.webm/Color_sorter_coffeebeans.webm.480p.vp9.webm",
+  "width": 854,
+  "height": 480,
+  "duration": 15.5,
+  "bytes": 1971077,
+  "credit": "\"Color sorter coffeebeans\" by AlexanderKlink, CC0, via Wikimedia Commons",
+  "notes": [],
+  "saved": "2026-11-02T14:17:04.485Z"
+ }
+]

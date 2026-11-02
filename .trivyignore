@@ -1,0 +1,6 @@
+# Accepted vulnerability exceptions. Each entry needs: the reason, an owner, and an expiry date
+# (`exp:YYYY-MM-DD`). After that date Trivy blocks the build again. Rules: docs/pipeline-policy.md.
+#
+# Example (not active):
+#   # Reason: no fixed version; the vulnerable function is never called. Owner: <name>. Review: weekly.
+#   CVE-0000-00000 exp:2026-12-31

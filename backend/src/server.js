@@ -1,0 +1,14 @@
+import { app } from './app.js'
+import { config } from './config.js'
+import { pool } from './db.js'
+
+const server = app.listen(config.port, () => {
+  console.log(`Tropic Line API listening on http://localhost:${config.port}`)
+})
+
+// Close cleanly when Docker or Kubernetes stops the container.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    server.close(() => pool.end().then(() => process.exit(0)))
+  })
+}
