@@ -1,0 +1,61 @@
+# The shop: nginx (unprivileged image) serving the built app and forwarding /api/ to the API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: tropicline
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: web }
+  ports: [{ name: http, port: 8080, targetPort: http, nodePort: 30080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: tropicline
+  labels: { app.kubernetes.io/name: web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: web }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: web }
+    spec:
+      serviceAccountName: web
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: web
+          image: ghcr.io/saramseibi/shopcart-web:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: API_UPSTREAM, value: "http://api:3000" }
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            # nginx renders its config and keeps temporary files here; the rest is read-only.
+            - { name: tmp, mountPath: /tmp }
+            - { name: conf, mountPath: /etc/nginx/conf.d }
+      volumes:
+        - { name: tmp, emptyDir: { sizeLimit: 64Mi } }
+        - { name: conf, emptyDir: { sizeLimit: 1Mi } }

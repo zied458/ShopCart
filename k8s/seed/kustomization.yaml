@@ -1,0 +1,6 @@
+# Loads the schema and the sample catalogue, users and orders (drops existing tables first).
+#   kubectl apply -k k8s/seed
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tropicline
+resources: [db-seed.yaml]

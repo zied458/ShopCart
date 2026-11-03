@@ -1,0 +1,16 @@
+# Tropic Line on Kubernetes: kubectl apply -k k8s/base  (after scripts/k8s/up.sh created the secret)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tropicline
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: tropicline
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - quota.yaml
+  - serviceaccounts.yaml
+  - network-policies.yaml
+  - db.yaml
+  - api.yaml
+  - web.yaml

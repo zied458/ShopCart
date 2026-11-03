@@ -13,7 +13,7 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 LABEL org.opencontainers.image.title="tropicline-web" \
       org.opencontainers.image.description="Tropic Line ShopCart storefront" \
-      org.opencontainers.image.source="https://github.com/OWNER/tropicline"
+      org.opencontainers.image.source="https://github.com/saramseibi/Shopcart"
 # Where nginx forwards /api; overridden per environment (Compose service name, Kubernetes service).
 ENV API_UPSTREAM=http://api:3000
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template

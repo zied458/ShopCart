@@ -1,0 +1,130 @@
+# Kyverno admission policies for the tropicline namespace (Kyverno 1.19, CEL ValidatingPolicy).
+# validationActions: Deny = a workload that breaks a rule is refused by the API server, not just reported.
+# autogen: the same rules are checked on Deployments, StatefulSets and Jobs, so the error shows at apply time.
+# Pod Security Admission ("restricted") already covers part of this; Kyverno adds our own rules on top:
+# read-only filesystem, limits, trusted registries, no API token, secrets as files.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: tropicline-hardened-containers
+  annotations:
+    policies.kyverno.io/description: Every container runs as non-root, read-only, without privilege escalation or capabilities.
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, jobs, cronjobs, daemonsets]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels: { kubernetes.io/metadata.name: tropicline }
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])"
+    - name: podNonRoot
+      expression: "object.spec.?securityContext.?runAsNonRoot.orValue(false)"
+  validations:
+    - expression: "variables.containers.all(c, c.?securityContext.?runAsNonRoot.orValue(variables.podNonRoot) == true)"
+      message: "Containers must run as a non-root user (runAsNonRoot: true)."
+    - expression: "variables.containers.all(c, c.?securityContext.?allowPrivilegeEscalation.orValue(true) == false)"
+      message: "Containers must set allowPrivilegeEscalation: false."
+    - expression: "variables.containers.all(c, c.?securityContext.?privileged.orValue(false) == false)"
+      message: "Privileged containers are not allowed."
+    - expression: "variables.containers.all(c, c.?securityContext.?readOnlyRootFilesystem.orValue(false) == true)"
+      message: "Containers must use a read-only root filesystem (readOnlyRootFilesystem: true)."
+    - expression: "variables.containers.all(c, 'ALL' in c.?securityContext.?capabilities.?drop.orValue([]))"
+      message: "Containers must drop all Linux capabilities (capabilities.drop: [ALL])."
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: tropicline-resources-and-host
+  annotations:
+    policies.kyverno.io/description: Every container has CPU and memory limits; no access to the node.
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, jobs, cronjobs, daemonsets]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels: { kubernetes.io/metadata.name: tropicline }
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: "object.spec.containers + object.spec.?initContainers.orValue([])"
+  validations:
+    - expression: "variables.containers.all(c, has(c.resources) && has(c.resources.limits) && 'cpu' in c.resources.limits && 'memory' in c.resources.limits)"
+      message: "Containers must set CPU and memory limits."
+    - expression: "!object.spec.?hostNetwork.orValue(false) && !object.spec.?hostPID.orValue(false) && !object.spec.?hostIPC.orValue(false)"
+      message: "Pods may not share the node's network, process or IPC namespaces."
+    - expression: "object.spec.?volumes.orValue([]).all(v, !has(v.hostPath))"
+      message: "hostPath volumes are not allowed."
+    - expression: "variables.containers.all(c, c.?ports.orValue([]).all(p, !has(p.hostPort)))"
+      message: "hostPort is not allowed."
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: tropicline-supply-chain
+  annotations:
+    policies.kyverno.io/description: Images come from our registry (or the pinned official Postgres) with an explicit version.
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, jobs, cronjobs, daemonsets]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels: { kubernetes.io/metadata.name: tropicline }
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])"
+  validations:
+    - expression: "variables.containers.all(c, c.image.startsWith('ghcr.io/saramseibi/shopcart-') || (c.image.startsWith('docker.io/library/postgres:') && c.image.contains('@sha256:')))"
+      message: "Images must come from ghcr.io/saramseibi/shopcart-*, or be the official Postgres image pinned by digest."
+    - expression: "variables.containers.all(c, c.image.contains('@sha256:') || (c.image.split('/')[c.image.split('/').size() - 1].contains(':') && !c.image.endsWith(':latest')))"
+      message: "Images need an explicit tag or digest; ':latest' is not allowed."
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: tropicline-identity-and-secrets
+  annotations:
+    policies.kyverno.io/description: No Kubernetes API token in pods, own service account, secrets mounted as files.
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, jobs, cronjobs, daemonsets]
+  matchConstraints:
+    namespaceSelector:
+      matchLabels: { kubernetes.io/metadata.name: tropicline }
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: "object.spec.containers + object.spec.?initContainers.orValue([])"
+  validations:
+    - expression: "object.spec.?automountServiceAccountToken.orValue(true) == false"
+      message: "Pods must not mount a Kubernetes API token (automountServiceAccountToken: false)."
+    - expression: "object.spec.?serviceAccountName.orValue('default') != 'default'"
+      message: "Pods must use their own service account, not 'default'."
+    - expression: "variables.containers.all(c, c.?env.orValue([]).all(e, !has(e.valueFrom) || !has(e.valueFrom.secretKeyRef)) && c.?envFrom.orValue([]).all(e, !has(e.secretRef)))"
+      message: "Secrets must be mounted as read-only files, not passed as environment variables (they leak into logs, crash dumps and 'kubectl describe')."

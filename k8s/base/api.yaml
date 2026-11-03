@@ -1,0 +1,67 @@
+# The API: two replicas, read-only filesystem, secrets mounted as files (never as environment variables).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: tropicline
+spec:
+  selector: { app.kubernetes.io/name: api }
+  ports: [{ name: http, port: 3000, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: tropicline
+  labels: { app.kubernetes.io/name: api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: api }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api }
+    spec:
+      serviceAccountName: api
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: ghcr.io/saramseibi/shopcart-api:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: DB_HOST, value: db }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_PASSWORD_FILE, value: /run/secrets/tropicline/db-password }
+            - { name: JWT_SECRET_FILE, value: /run/secrets/tropicline/jwt-secret }
+          ports: [{ name: http, containerPort: 3000 }]
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: secrets, mountPath: /run/secrets/tropicline, readOnly: true }
+      volumes:
+        - name: secrets
+          secret:
+            secretName: tropicline-secrets
+            defaultMode: 0440
+            items:
+              - { key: db-password, path: db-password }
+              - { key: jwt-secret, path: jwt-secret }

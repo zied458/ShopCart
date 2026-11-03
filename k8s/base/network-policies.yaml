@@ -1,0 +1,91 @@
+# Default deny, then one rule per allowed flow:
+#   anyone -> web:8080 -> api:3000 -> db:5432 <- db-seed
+# DNS is allowed only for the pods that resolve service names. Nothing may leave for the internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: tropicline
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: tropicline
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [web, api, db-seed] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  namespace: tropicline
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: web }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{ protocol: TCP, port: 8080 }] # the public entry point
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: api } } }]
+      ports: [{ protocol: TCP, port: 3000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api
+  namespace: tropicline
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: api }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: web } } }]
+      ports: [{ protocol: TCP, port: 3000 }]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: db } } }]
+      ports: [{ protocol: TCP, port: 5432 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db
+  namespace: tropicline
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: db }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: api } }
+        - podSelector: { matchLabels: { app.kubernetes.io/name: db-seed } }
+      ports: [{ protocol: TCP, port: 5432 }]
+  egress: [] # the database talks to no one
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-seed
+  namespace: tropicline
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: db-seed }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app.kubernetes.io/name: db } } }]
+      ports: [{ protocol: TCP, port: 5432 }]

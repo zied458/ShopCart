@@ -1,0 +1,16 @@
+# Caps what the namespace can consume, so a runaway or abused pod cannot starve the node.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tropicline
+  namespace: tropicline
+spec:
+  hard:
+    pods: "12"
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    persistentvolumeclaims: "2"
+    services.nodeports: "1"
+    services.loadbalancers: "0"

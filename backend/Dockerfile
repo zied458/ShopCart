@@ -11,13 +11,14 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:b8cec4b2f2126ff7bd034ec9ac207ffb3272667dfdc48376e3b035d3270549ba
 LABEL org.opencontainers.image.title="tropicline-api" \
       org.opencontainers.image.description="Tropic Line ShopCart API" \
-      org.opencontainers.image.source="https://github.com/OWNER/tropicline"
+      org.opencontainers.image.source="https://github.com/saramseibi/Shopcart"
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000
-COPY --from=deps --chown=65532:65532 /app/node_modules ./node_modules
-COPY --chown=65532:65532 package.json ./
-COPY --chown=65532:65532 src ./src
-COPY --chown=65532:65532 db ./db
+# Files stay owned by root: user 65532 can read and run the code but not change it.
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY src ./src
+COPY db ./db
 USER 65532:65532
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
