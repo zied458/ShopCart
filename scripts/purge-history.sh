@@ -8,11 +8,12 @@
 #   bash scripts/purge-history.sh --push   the same, then force-push the rewritten history to origin
 #
 # The leaked values are read from .secrets/leaked-values.txt (ignored by Git), one per line; each one becomes
-# ***REMOVED*** in every commit. Every commit id changes: everyone must re-clone afterwards.
+# *** in every commit (short on purpose: a longer placeholder in postgres://user:...@host still looks like a
+# password to Gitleaks). Every commit id changes: everyone must re-clone afterwards.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && { pwd -W 2>/dev/null || pwd; })" # C:/... on Windows, for git.exe
 LIST="$ROOT/.secrets/leaked-values.txt"
 WORK="$ROOT/.purge"
 GITLEAKS_IMAGE=ghcr.io/gitleaks/gitleaks:v8.30.1
@@ -25,7 +26,7 @@ ORIGIN="$(git -C "$ROOT" remote get-url origin)"
 echo "── 1. Fresh mirror of $ORIGIN (what the world can see)"
 rm -rf "$WORK" && mkdir -p "$WORK"
 git clone --quiet --mirror "$ORIGIN" "$WORK/repo.git"
-tr -d '\r' < "$LIST" | grep -v '^\s*$' > "$WORK/replacements.txt"
+tr -d '\r' < "$LIST" | grep -v '^\s*$' | sed 's/$/==>***/' > "$WORK/replacements.txt"
 echo "$(wc -l < "$WORK/replacements.txt") value(s) to remove"
 
 echo "── 2. Before: Gitleaks on the current history"
