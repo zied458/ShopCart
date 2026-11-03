@@ -8,9 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "start": "node src/server.js",
-    "db:init": "node db/init.js"
+    "db:init": "node --env-file-if-exists=.env db/init.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

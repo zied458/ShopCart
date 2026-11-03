@@ -98,6 +98,9 @@ Les gravités sont des estimations qualitatives (impact × facilité d'exploitat
 - **Correction prévue** : **révoquer d'abord** (nouveau secret, ce qui invalide tous les jetons émis),
   **purger ensuite** l'historique Git ; secret fourni à l'exécution par un Secret Kubernetes ; le
   serveur refuse de démarrer sans secret ; Gitleaks bloque tout nouveau secret dans le pipeline.
+- **Statut : corrigée** (3 novembre 2026). Secrets révoqués puis fournis à l'exécution en fichiers ;
+  plus aucune valeur dans le code ; l'API refuse de démarrer sans secret. Détail, preuves et purge de
+  l'historique : `docs/secrets.md`.
 
 ## V7 — Dépendance vulnérable
 
@@ -128,6 +131,21 @@ Les gravités sont des estimations qualitatives (impact × facilité d'exploitat
 - **Correction prévue** : message générique au client, détail uniquement dans les journaux (avec un
   identifiant de corrélation) ; CORS limité à l'origine du site ; en-têtes de sécurité (helmet) ;
   `X-Powered-By` désactivé.
+
+---
+
+## Suivi des failles
+
+| # | Détectée par l'analyse statique (CI) | Confirmée à l'exécution par ZAP (`docs/dast.md`) | Statut |
+|---|---|---|---|
+| V1 | Semgrep (règle d'équipe) | **oui** — SQL Injection, risque High | ouverte |
+| V2 | non | non (logique métier) | ouverte |
+| V3 | non | non (contrôle d'accès, demande deux comptes) | ouverte |
+| V4 | Semgrep (règle d'équipe) | non | ouverte |
+| V5 | Semgrep (règle d'équipe) | **oui** — XSS persistant dans une réponse JSON | ouverte |
+| V6 | Gitleaks, Semgrep | — (corrigée avant le scan) | **corrigée** (`docs/secrets.md`) |
+| V7 | Trivy (dépendances et image) | non | ouverte |
+| V8 | Semgrep (2 avertissements) | **oui** — CORS ouvert, en-têtes absents, `X-Powered-By` | ouverte |
 
 ---
 

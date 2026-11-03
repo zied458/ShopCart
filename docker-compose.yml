@@ -1,4 +1,5 @@
 # Local stack. Own project name so it never touches other "shopcart" containers.
+#   bash scripts/new-secrets.sh    once: creates the random secrets in .secrets/ (ignored by Git)
 #   docker compose up -d db        database only (for npm run dev)
 #   docker compose up -d --build   database + API + shop on http://localhost:8081
 name: tropicline
@@ -15,8 +16,9 @@ services:
     environment:
       POSTGRES_DB: tropicline
       POSTGRES_USER: tropicline
-      # Development-only credentials (see docs/vulnerabilities.md, V6)
-      POSTGRES_PASSWORD: ***
+      # Read from a secret file mounted at runtime (docs/secrets.md); never written here.
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
@@ -32,7 +34,11 @@ services:
     build: ./backend
     image: tropicline-api:dev
     environment:
-      DATABASE_URL: postgres://tropicline:***@db:5432/tropicline
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+    secrets: [db_password, jwt_secret]
     depends_on:
       db:
         condition: service_healthy
@@ -54,3 +60,10 @@ services:
 
 volumes:
   dbdata:
+
+# Mounted as files under /run/secrets/ in the containers that list them.
+secrets:
+  db_password:
+    file: ./.secrets/db_password
+  jwt_secret:
+    file: ./.secrets/jwt_secret
