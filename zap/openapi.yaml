@@ -1,0 +1,112 @@
+# Tropic Line API, described for the ZAP scan (zap/plan.yaml): ZAP imports it to know every route and parameter,
+# since a single-page app hides most API calls from a crawler.
+openapi: 3.0.3
+info:
+  title: Tropic Line API
+  version: "1.0"
+servers:
+  - url: http://127.0.0.1:8090
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, example: amel.t@example.com }
+        password: { type: string, example: Customer-2026 }
+    Registration:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, example: Zap Tester }
+        email: { type: string, example: zap.tester@example.com }
+        password: { type: string, example: Zap-Tester-2026 }
+    OrderLine:
+      type: object
+      properties:
+        slug: { type: string, example: kenya-nyeri }
+        grind: { type: string, example: filter }
+        qty: { type: integer, example: 1 }
+        price: { type: number, example: 48 }
+    Order:
+      type: object
+      required: [email, name, phone, address, city, items]
+      properties:
+        email: { type: string, example: amel.t@example.com }
+        name: { type: string, example: Amel T. }
+        phone: { type: string, example: "+216 20 000 000" }
+        address: { type: string, example: 12 rue de Marseille }
+        city: { type: string, example: Tunis }
+        items: { type: array, items: { $ref: "#/components/schemas/OrderLine" } }
+    Review:
+      type: object
+      properties:
+        rating: { type: integer, example: 5 }
+        body: { type: string, example: Bright and juicy. }
+    Profile:
+      type: object
+      properties:
+        phone: { type: string, example: "+216 20 000 000" }
+        address: { type: string, example: 12 rue de Marseille }
+        city: { type: string, example: Tunis }
+        preferences: { type: object, properties: { grind: { type: string, example: filter } } }
+paths:
+  /api/health:
+    get: { summary: Health, responses: { "200": { description: OK } } }
+  /api/auth/register:
+    post:
+      summary: Create an account
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Registration" } } } }
+      responses: { "201": { description: Created } }
+  /api/auth/login:
+    post:
+      summary: Sign in
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Credentials" } } } }
+      responses: { "200": { description: Token } }
+  /api/auth/me:
+    get: { summary: Current user, security: [{ bearer: [] }], responses: { "200": { description: OK } } }
+  /api/products:
+    get:
+      summary: Catalogue and search
+      parameters:
+        - { name: search, in: query, schema: { type: string, example: kenya } }
+        - { name: sort, in: query, schema: { type: string, example: price } }
+      responses: { "200": { description: OK } }
+  /api/products/{slug}:
+    get:
+      summary: One product
+      parameters: [{ name: slug, in: path, required: true, schema: { type: string, example: kenya-nyeri } }]
+      responses: { "200": { description: OK } }
+  /api/products/{slug}/reviews:
+    parameters: [{ name: slug, in: path, required: true, schema: { type: string, example: kenya-nyeri } }]
+    get: { summary: Reviews, responses: { "200": { description: OK } } }
+    post:
+      summary: Add a review
+      security: [{ bearer: [] }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Review" } } } }
+      responses: { "201": { description: Created } }
+  /api/orders:
+    post:
+      summary: Place an order
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+      responses: { "201": { description: Created } }
+  /api/orders/mine:
+    get: { summary: My orders, security: [{ bearer: [] }], responses: { "200": { description: OK } } }
+  /api/orders/{id}:
+    get:
+      summary: One order
+      security: [{ bearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer, example: 1001 } }]
+      responses: { "200": { description: OK } }
+  /api/users/me:
+    patch:
+      summary: Update my profile
+      security: [{ bearer: [] }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Profile" } } } }
+      responses: { "200": { description: OK } }
+  /api/admin/orders:
+    get: { summary: All orders (admin), security: [{ bearer: [] }], responses: { "200": { description: OK } } }
+  /api/admin/customers:
+    get: { summary: All customers (admin), security: [{ bearer: [] }], responses: { "200": { description: OK } } }

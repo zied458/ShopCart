@@ -1,0 +1,66 @@
+# OWASP ZAP automation plan: authenticated dynamic scan of the deployed shop (run by scripts/zap-scan.sh).
+# ${TARGET} is the shop's URL. Every request carries "Authorization: Bearer <token>" of a signed-in customer,
+# given to ZAP through ZAP_AUTH_HEADER_VALUE, so the scan reaches the routes behind sign-in.
+env:
+  contexts:
+    - name: tropicline
+      urls: ["${TARGET}"]
+      includePaths: ["${TARGET}.*"]
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  # Proof that the scan is signed in: this route answers 401 without a valid token.
+  - type: requestor
+    name: authenticated-check
+    requests:
+      - url: "${TARGET}/api/auth/me"
+        method: GET
+        responseCode: 200
+
+  # The API routes and their parameters, from the OpenAPI description.
+  - type: openapi
+    parameters:
+      apiFile: /zap/wrk/plan/openapi.yaml
+      targetUrl: "${TARGET}"
+      context: tropicline
+
+  # The shop's pages (headers, cookies, client-side files).
+  - type: spider
+    parameters:
+      context: tropicline
+      maxDuration: 2
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: activeScan
+    parameters:
+      context: tropicline
+      maxRuleDurationInMins: 2
+      maxScanDurationInMins: 15
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk/out
+      reportFile: zap-report.html
+      reportTitle: Tropic Line - authenticated ZAP scan
+    risks: [info, low, medium, high]
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk/out
+      reportFile: zap-report.json
+    risks: [info, low, medium, high]
