@@ -1,14 +1,17 @@
 # Tropic Line — ShopCart (projet DevSecOps)
 
 Online shop for a fictional coffee roaster, built to be secured across its whole life cycle for the
-ING-5-SSIR DevSecOps project. **The current version is deliberately vulnerable**: see
+ING-5-SSIR DevSecOps project. **It still contains deliberate flaws** (V1–V5, V7, V8; V6 is fixed): see
 [docs/vulnerabilities.md](docs/vulnerabilities.md). Run it only on your own machine.
 
 ```
 frontend/   React + Vite + Tailwind shop (port 5173 in dev, 4173 in preview)
 backend/    Node.js + Express API (port 3000)
+k8s/        Kubernetes manifests, Kyverno policies, kind cluster
+zap/        OWASP ZAP scan plan and API description
+scripts/    Secrets, cluster, scans, CI summaries
 docker-compose.yml   PostgreSQL 17 for development (host port 5433)
-docs/       Security documentation
+docs/       Security documentation (in French)
 ```
 
 ## Run it locally
@@ -16,6 +19,9 @@ docs/       Security documentation
 Needs Node.js 22+ and Docker Desktop.
 
 ```bash
+# 0. secrets: random values in .secrets/ (ignored by Git), once
+bash scripts/new-secrets.sh
+
 # 1. database
 docker compose up -d db
 
@@ -40,14 +46,27 @@ docker compose up -d --build     # shop + API + database on http://localhost:808
 Images: `backend/Dockerfile` (distroless Node 24, user 65532) and `frontend/Dockerfile`
 (unprivileged nginx, user 101). Both are multi-stage, run read-only with every Linux capability dropped.
 
+### Or on Kubernetes (hardened test cluster)
+
+```bash
+bash scripts/k8s/up.sh       # kind cluster + Kyverno + deploy: http://127.0.0.1:8090
+bash scripts/k8s/verify.sh   # 22 hardening checks on the live cluster
+bash scripts/zap-scan.sh     # authenticated OWASP ZAP scan
+bash scripts/k8s/down.sh
+```
+
+See [docs/kubernetes.md](docs/kubernetes.md), [docs/dast.md](docs/dast.md) and [docs/secrets.md](docs/secrets.md).
+
 ## Security checks
 
 ```bash
 bash scripts/security-scan.sh    # the CI security stage, locally (needs Docker)
 ```
 
-Pipeline: [.github/workflows/ci.yml](.github/workflows/ci.yml). Blocking rules and exceptions:
-[docs/pipeline-policy.md](docs/pipeline-policy.md). Reports land in `reports/`.
+Pipeline: [.github/workflows/ci.yml](.github/workflows/ci.yml): build, secrets, code, dependencies,
+deployment files, images, then a hardened Kubernetes deployment scanned by ZAP. Each run page shows a
+summary table per gate and a final **Security report**. Blocking rules and exceptions:
+[docs/pipeline-policy.md](docs/pipeline-policy.md). Local reports land in `reports/`.
 
 ## Test accounts (local lab only)
 

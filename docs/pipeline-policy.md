@@ -7,15 +7,24 @@ Ce document fixe ce qui **casse le build** dans l'étape de sécurité du pipeli
 ## Organisation du pipeline
 
 ```
-build ──► image (Trivy, par service)  ─┐
-secrets (Gitleaks, tout l'historique)  ├──► publish (GHCR, branche main uniquement)
-sast (Semgrep)                         │
-dependencies (Trivy fs)                │
-iac (Trivy config)                    ─┘
-                      … puis, après déploiement : DAST authentifié (OWASP ZAP), étape 4.6
+build ──┬─► image (Trivy, par service) ─────────────────────────┐
+        └─► dast : déploiement kind durci + vérifications       ├──► publish (GHCR, branche main uniquement)
+             Kubernetes + ZAP authentifié                       │
+secrets (Gitleaks, tout l'historique)                           │
+sast (Semgrep)                                                  │
+dependencies (Trivy fs)                                         │
+iac (Trivy config : Dockerfile, Compose, Kubernetes) ──────────┘
+                                       report : synthèse de toutes les barrières (toujours exécuté)
 ```
 
-Les cinq contrôles de sécurité tournent en parallèle. L'image n'est publiée que si **tous** réussissent.
+Les contrôles tournent en parallèle. L'image n'est publiée que si **tous** réussissent, y compris le
+déploiement de test et le scan dynamique.
+
+**Lisibilité.** Chaque job écrit un résumé sur la page de l'exécution GitHub (tableau des détections avec
+gravité, emplacement, correctif et faille du projet concernée), produit par `scripts/ci/summary.mjs` à
+partir des rapports JSON des outils. Le job *Security report* rassemble toutes les barrières dans un seul
+tableau et publie `security-report.json`. Les rapports complets sont joints à l'exécution (artefacts).
+Les valeurs des secrets n'apparaissent jamais : seuls la règle, le fichier, la ligne et le commit sont affichés.
 La branche `main` doit être protégée (règle « Require status checks to pass ») pour que ce blocage
 s'applique aussi aux fusions de pull requests.
 
@@ -32,6 +41,8 @@ lui-même ne change pas sans revue (chaîne d'approvisionnement, OWASP A03:2025)
 | Dépendances | Trivy `fs` (fichiers `package-lock.json`) | `CRITICAL` et `HIGH` **avec correctif disponible** | `MEDIUM`, `LOW`, failles sans correctif |
 | Image conteneur | Trivy `image` (paquets système, modules Node, secrets) + contrôle de l'utilisateur | `CRITICAL`/`HIGH` avec correctif, secret dans l'image, image exécutée en root | `MEDIUM`, `LOW` |
 | Fichiers de déploiement | Trivy `config` (Dockerfile, manifestes Kubernetes) | `HIGH` et `CRITICAL` | `MEDIUM`, `LOW` |
+| Déploiement de test | `scripts/k8s/up.sh` + `scripts/k8s/verify.sh` sur un cluster kind | échec du déploiement, ou l'un des 22 contrôles de durcissement | — |
+| Scan dynamique (DAST) | OWASP ZAP 2.17.0, authentifié, sur l'application déployée | alerte de risque `High` | `Medium`, `Low`, `Informational` |
 
 ## Justification des seuils
 
@@ -50,6 +61,11 @@ lui-même ne change pas sans revue (chaîne d'approvisionnement, OWASP A03:2025)
   signalée et suivie. `MEDIUM`/`LOW` sont signalés seulement, pour éviter la fatigue d'alertes.
 - **Image en root : bloquant.** Exigence 4.1 ; une évasion du conteneur depuis un processus root a un
   impact bien plus grand.
+- **Déploiement de test : tout écart.** Les 22 contrôles sont binaires (un pod root est admis ou non) ;
+  un seul échec signifie que la protection n'est pas en place.
+- **DAST : `High`.** ZAP n'émet `High` que pour une attaque qui a réussi contre l'application en marche
+  (injection SQL, XSS…), avec peu de faux positifs. `Medium` regroupe surtout des en-têtes de sécurité
+  absents et des configurations à trier ; ils sont signalés et suivis (docs/dast.md).
 - **Fichiers de déploiement : `HIGH`/`CRITICAL`.** Ce niveau couvre les privilèges excessifs
   (conteneur privilégié, root, montage de l'hôte), ceux qui ouvrent un chemin vers le nœud.
 

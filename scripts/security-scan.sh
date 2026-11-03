@@ -16,6 +16,9 @@ REPORTS="$ROOT/reports"
 mkdir -p "$REPORTS"
 ONLY="${1:-all}"
 declare -A RESULT
+# Installed packages and build output are not judged here (dependencies are, from the lock files), and walking
+# them through a Windows bind mount is very slow. Only for fs/config scans: an image scan must see node_modules.
+SKIP=(--skip-dirs '**/node_modules' --skip-dirs '**/dist' --skip-dirs .tools --skip-dirs .git --skip-dirs reports)
 
 run() { # name, command...
   local name="$1"; shift
@@ -43,13 +46,13 @@ sast() {
 }
 
 deps() {
-  docker run --rm -v trivy-cache:/root/.cache -v "$MOUNT:/src" -w /src "$TRIVY_IMAGE" fs --quiet --scanners vuln \
+  docker run --rm -v trivy-cache:/root/.cache -v "$MOUNT:/src" -w /src "$TRIVY_IMAGE" fs --quiet --scanners vuln "${SKIP[@]}" \
     --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore --exit-code 1 .
 }
 
 iac() {
-  docker run --rm -v trivy-cache:/root/.cache -v "$MOUNT:/src" -w /src "$TRIVY_IMAGE" config --quiet \
-    --skip-dirs node_modules --severity HIGH,CRITICAL --exit-code 1 .
+  docker run --rm -v trivy-cache:/root/.cache -v "$MOUNT:/src" -w /src "$TRIVY_IMAGE" config --quiet "${SKIP[@]}" \
+    --severity HIGH,CRITICAL --exit-code 1 .
 }
 
 images() {

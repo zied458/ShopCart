@@ -1,6 +1,6 @@
-# Tropic Line CI: build, then a blocking security stage, then publish.
-# Blocking rules and exceptions: docs/pipeline-policy.md.
-# The same checks run locally with scripts/security-scan.sh.
+# Tropic Line CI: build, a blocking security stage, a hardened test deployment scanned by ZAP, then publish.
+# Every gate writes a readable summary on the run page (scripts/ci/summary.mjs); the last job sums them all up.
+# Blocking rules and exceptions: docs/pipeline-policy.md. The same checks run locally with scripts/security-scan.sh.
 name: CI
 
 on:
@@ -62,7 +62,10 @@ jobs:
           mkdir -p reports
           docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" \
             git /repo --config /repo/.gitleaks.toml --redact --no-banner \
-            --report-format sarif --report-path /repo/reports/gitleaks.sarif --exit-code 1
+            --report-format json --report-path /repo/reports/gitleaks.json --exit-code 1
+      - name: Summary
+        if: always()
+        run: node scripts/ci/summary.mjs gitleaks reports/gitleaks.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -82,9 +85,11 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
             semgrep scan --config p/default --config .semgrep/ --metrics=off \
             --sarif-output=reports/semgrep.sarif --json-output=reports/semgrep.json backend/src frontend/src
+      - name: Summary
+        if: always()
+        run: node scripts/ci/summary.mjs semgrep reports/semgrep.json >> "$GITHUB_STEP_SUMMARY"
       - name: Block on ERROR findings
         run: |
-          jq -r '.results[] | "\(.extra.severity)\t\(.check_id | split(".") | last)\t\(.path):\(.start.line)"' reports/semgrep.json | sort
           errors=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' reports/semgrep.json)
           echo "Blocking findings (ERROR): $errors"
           test "$errors" -eq 0
@@ -104,11 +109,14 @@ jobs:
       - name: Full report (all severities)
         run: |
           mkdir -p reports
-          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln \
-            --format sarif --output reports/dependencies.sarif .
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --quiet --scanners vuln \
+            --ignorefile .trivyignore --format json --output reports/dependencies.json .
+      - name: Summary
+        if: always()
+        run: node scripts/ci/summary.mjs trivy reports/dependencies.json "Dependencies (package-lock.json)" >> "$GITHUB_STEP_SUMMARY"
       - name: Block on HIGH and CRITICAL with a fix available
         run: |
-          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln \
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --quiet --scanners vuln \
             --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore --exit-code 1 .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -123,10 +131,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Dockerfiles and Kubernetes manifests
+      - name: Dockerfiles, Compose and Kubernetes manifests
         run: |
-          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config \
-            --skip-dirs node_modules --severity HIGH,CRITICAL --exit-code 1 .
+          mkdir -p reports
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config --quiet --format json --output reports/iac.json .
+      - name: Summary
+        if: always()
+        run: node scripts/ci/summary.mjs config reports/iac.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Block on HIGH and CRITICAL
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" config --quiet --severity HIGH,CRITICAL --exit-code 1 .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: iac-report
+          path: reports/
 
   image:
     name: "Security · Images (Trivy)"
@@ -147,17 +166,82 @@ jobs:
           user=$(docker image inspect "tropicline-${{ matrix.service }}:ci" --format '{{.Config.User}}')
           echo "Image user: '${user}'"
           case "${user%%:*}" in ""|root|0) echo "::error::The image runs as root"; exit 1;; esac
+          echo "Image \`tropicline-${{ matrix.service }}\` runs as user \`${user}\` (not root)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Full report (all severities)
+        run: |
+          mkdir -p reports
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src" -w /src "$TRIVY_IMAGE" image --quiet \
+            --scanners vuln,secret --ignorefile .trivyignore --format json --output reports/image.json \
+            "tropicline-${{ matrix.service }}:ci"
+      - name: Summary
+        if: always()
+        run: node scripts/ci/summary.mjs trivy reports/image.json "Image ${{ matrix.service == 'backend' && 'api (distroless Node.js)' || 'web (nginx)' }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Block on vulnerable packages or secrets in the image
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src" -w /src "$TRIVY_IMAGE" image \
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src" -w /src "$TRIVY_IMAGE" image --quiet \
             --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore \
             --exit-code 1 "tropicline-${{ matrix.service }}:ci"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: image-${{ matrix.service }}-report
+          path: reports/
+
+  # ---------------------------------------------------------------- deploy + dynamic testing
+  dast:
+    name: "Deploy to Kubernetes + ZAP (authenticated)"
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Deploy (kind cluster, Kyverno, NetworkPolicies, secrets created at runtime)
+        run: bash scripts/k8s/up.sh
+      - name: Check the hardening on the live cluster
+        run: bash scripts/k8s/verify.sh
+      - name: Authenticated ZAP scan
+        if: success() || failure()
+        run: bash scripts/zap-scan.sh
+      - name: Cluster state (for debugging)
+        if: failure()
+        run: |
+          kubectl --context kind-tropicline get pods,events -A | tail -60
+          kubectl --context kind-tropicline -n tropicline logs deployment/api --tail=50 || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dast-report
+          path: reports/
+
+  # ---------------------------------------------------------------- overview of every gate
+  report:
+    name: Security report
+    runs-on: ubuntu-24.04
+    needs: [build, secrets, sast, dependencies, iac, image, dast]
+    if: always()
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: reports
+      - name: Build the report
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/summary.mjs report reports >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: security-report
+          path: reports/security-report.json
 
   # ---------------------------------------------------------------- publish
   publish:
     name: Publish images
     runs-on: ubuntu-24.04
-    needs: [secrets, sast, dependencies, iac, image]
+    needs: [secrets, sast, dependencies, iac, image, dast]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -187,5 +271,3 @@ jobs:
           tags: |
             ${{ steps.name.outputs.image }}:${{ github.sha }}
             ${{ steps.name.outputs.image }}:main
-
-  # Dynamic testing (OWASP ZAP, authenticated) runs after deployment to the test cluster: added with the Kubernetes step.
