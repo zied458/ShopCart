@@ -66,7 +66,7 @@ droits minimaux (`contents: read` partout, `packages: write` dans le seul job de
 
 ### Ce qui s'est passé
 
-La première version (commit `0a4cdf9`) contenait la clé de signature des jetons comme valeur par défaut
+La première version (commit `0a4cdf9` à l'origine, `c70fc4a` après la purge) contenait la clé de signature des jetons comme valeur par défaut
 dans `backend/src/config.js`, et le mot de passe de la base dans `docker-compose.yml` et
 `config.js`. Le dépôt est **public**.
 
@@ -127,10 +127,15 @@ Gitleaks redevienne vert) : `scripts/purge-history.sh`.
 
 1. clone miroir du dépôt GitHub dans `.purge/` (le dossier de travail n'est pas touché) ;
 2. Gitleaks avant : 3 détections ;
-3. `git filter-repo --replace-text` remplace chaque valeur fuitée par `***REMOVED***` dans **tous** les
+3. `git filter-repo --replace-text` remplace chaque valeur fuitée par `***` dans **tous** les
    commits (liste des valeurs dans `.secrets/leaked-values.txt`, ignoré par Git) ;
 4. Gitleaks après : 0 détection, et une recherche littérale confirme l'absence des valeurs ;
 5. `--push` seulement : envoi forcé de l'historique réécrit.
+
+**Fait le 6 novembre 2026** sur `github.com/zied458/ShopCart` : 21 commits réécrits, Gitleaks
+`no leaks found`, envoi forcé de `master` ; dans le dossier de travail, `git reset --hard origin/master`
+puis suppression des anciens objets (`git reflog expire`, `git gc --prune=now`). L'étape *Secrets* du pipeline
+repasse au vert. Les numéros de commit ont changé (la version vulnérable est désormais `c70fc4a`).
 
 Après l'envoi forcé : chaque membre de l'équipe reclone le dépôt ; GitHub conserve un temps les commits
 devenus inaccessibles et les copies dans les forks et pull requests : pour un dépôt public, demander au

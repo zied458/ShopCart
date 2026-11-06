@@ -154,4 +154,4 @@ journal : {"level":"error","requestId":"b0eff675…","method":"GET","path":"/api
 | Semgrep | 4 `ERROR` (V1, V4, V5, V6) | **0 `ERROR`** (2 `WARNING`, faux positifs connus) |
 | Trivy dépendances (API) | 1 `CRITICAL`, 3 `HIGH` | **0** |
 | ZAP | 1 High (V1), 5 Medium, 3 Low | **0 High réelle**, 11 alertes sur 13 disparues (`docs/dast.md`) |
-| Gitleaks | 3 secrets | 3 secrets **dans l'historique uniquement** (déjà révoqués) : vert après la purge |
+| Gitleaks | 3 secrets | **0** (révoqués, puis historique purgé : `docs/secrets.md`) |

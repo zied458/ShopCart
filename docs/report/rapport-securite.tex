@@ -148,7 +148,7 @@ par l'attaquant.
 % ================================================================
 \section{Failles initiales}
 
-La première version (commit \code{0a4cdf9}) contient huit failles volontaires, chacune marquée \code{Vn}
+La première version (commit \code{c70fc4a}) contient huit failles volontaires, chacune marquée \code{Vn}
 dans le code et documentée \emph{avant} correction (emplacement, cause, impact) dans
 \code{docs/vulnerabilities.md}. Chaque impact a été démontré sur notre instance.
 
@@ -258,7 +258,7 @@ Tests de régression & 13 échecs sur 18 & \textbf{19 / 19} (lockout inclus) \\
 Semgrep & 4 \code{ERROR} (V1, V4, V5, V6) & \textbf{0 ERROR} (2 avertissements, faux positifs) \\
 Trivy, dépendances de l'API & 1 critique, 3 élevées & \textbf{0} \\
 ZAP authentifié & 1 High, 5 Medium, 3 Low & \textbf{0 High réelle}, 11 alertes sur 13 disparues \\
-Gitleaks & 3 secrets & 3 secrets \textbf{dans l'historique seulement}, déjà révoqués \\
+Gitleaks & 3 secrets & \textbf{0} (révoqués, puis historique purgé) \\
 \bottomrule
 \end{tabularx}
 \caption{Avant / après.}
@@ -305,7 +305,8 @@ générés aléatoirement au déploiement ; l'API refuse de démarrer sans eux. 
 \textbf{révocation} --- nouveau mot de passe (\code{ALTER USER}), nouvelle clé de signature, redémarrage :
 le jeton forgé passe de \textbf{200 à 401}, l'ancien mot de passe est refusé, les clients se reconnectent ;
 (2) \textbf{purge} --- \code{git filter-repo} remplace les valeurs dans tous les commits d'un miroir, vérifié
-par Gitleaks (\textbf{3 $\rightarrow$ 0}). Purger sans révoquer laisserait le secret valide dans tous les
+par Gitleaks (\textbf{3 $\rightarrow$ 0}), puis envoi forcé : l'étape \og Secrets \fg{} du pipeline
+repasse au vert. Purger sans révoquer laisserait le secret valide dans tous les
 clones déjà faits.
 
 \subsection{Déploiement Kubernetes durci}
@@ -365,8 +366,8 @@ la mise en quarantaine d'un pod ; il a été exercé sur le cluster.
 
 \textbf{Limites restantes.}
 \begin{itemize}
-  \item L'historique Git public contient encore les anciennes valeurs (révoquées, donc inutilisables) :
-  la purge est prête mais l'envoi forcé n'a pas été fait, ce qui maintient Gitleaks au rouge.
+  \item L'historique a été purgé et réécrit (Gitleaks : 0), mais les anciennes valeurs ont été publiques
+  un temps : des copies peuvent subsister (clones, caches). C'est pourquoi la révocation passait d'abord.
   \item Environnement de test : pas de TLS, Secret Kubernetes non chiffré dans etcd, cluster d'un nœud ;
   sur kind, le trafic arrive avec l'adresse du nœud, ce qui affaiblit les règles par adresse.
   \item Pas de centralisation des journaux (SIEM) ni de tableau de bord ; pas de détection au niveau des
