@@ -1,0 +1,5 @@
+*.aux
+*.toc
+*.out
+build.log
+rapport-securite.log

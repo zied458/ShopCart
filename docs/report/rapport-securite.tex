@@ -1,0 +1,397 @@
+% Rapport de sécurité — Tropic Line (ShopCart), projet DevSecOps ING-5-SSIR, TEK-UP.
+% Compiler : pdflatex rapport-securite.tex (deux fois, pour la table des matières et les liens)
+% ou importer ce fichier dans Overleaf (compilateur pdfLaTeX).
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage[a4paper,top=2cm,bottom=2.2cm,left=2.1cm,right=2.1cm]{geometry}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{booktabs,tabularx,array,longtable}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,babel}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\usepackage{float}
+
+% ---------------------------------------------------------------- à compléter par l'équipe
+\newcommand{\Equipe}{Nom Prénom 1, Nom Prénom 2, Nom Prénom 3, Nom Prénom 4}
+\newcommand{\Depot}{\url{https://github.com/zied458/ShopCart}}
+% ----------------------------------------------------------------
+
+\definecolor{ink}{HTML}{21170F}
+\definecolor{cherry}{HTML}{A3172C}
+\definecolor{ok}{HTML}{1E7B34}
+\definecolor{ko}{HTML}{B3261E}
+\definecolor{soft}{HTML}{F3F1EE}
+\newcommand{\ok}{\textcolor{ok}{\textbf{OK}}}
+\newcommand{\ko}{\textcolor{ko}{\textbf{échec}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+\setlist{nosep,leftmargin=*}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.18}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small Tropic Line --- Rapport de sécurité}
+\rhead{\small DevSecOps, ING-5-SSIR}
+\cfoot{\small \thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\hypersetup{pdftitle={Rapport de sécurité --- Tropic Line (ShopCart)},pdfauthor={Équipe Tropic Line}}
+
+\begin{document}
+
+% ================================================================ titre
+\begin{center}
+  {\color{cherry}\rule{\linewidth}{1.2pt}}\\[0.6em]
+  {\LARGE\bfseries Rapport de sécurité --- Tropic Line (ShopCart)}\\[0.4em]
+  {\large Sécuriser une boutique en ligne sur tout son cycle de vie}\\[0.7em]
+  {\small TEK-UP University --- ING-5-SSIR --- Module DevSecOps --- Enseignant : Oussema Mansouri}\\[0.3em]
+  {\small Équipe : \Equipe}\\[0.2em]
+  {\small Dépôt : \Depot\quad --- \quad Novembre 2026}\\[0.4em]
+  {\color{cherry}\rule{\linewidth}{1.2pt}}
+\end{center}
+
+\noindent\colorbox{soft}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small
+\textbf{Résumé.} Tropic Line est une boutique de cafés de spécialité (React, Node.js/Express, PostgreSQL)
+construite avec \textbf{huit failles volontaires}, documentées avant toute correction. Une chaîne DevSecOps
+a ensuite été mise en place : images conteneur minimales et sans root, pipeline GitHub Actions à étape de
+sécurité bloquante (Gitleaks, Semgrep, Trivy), secrets fournis à l'exécution et révoqués après la fuite,
+déploiement Kubernetes durci (Pod Security \og restricted \fg{}, NetworkPolicies en refus par défaut,
+Kyverno), scan dynamique authentifié OWASP ZAP, détection à l'exécution et plan de réponse à incident.
+Les huit failles sont corrigées, chacune dans son propre commit, et protégées par un test de régression :
+\textbf{13 tests sur 18 échouaient} sur la version vulnérable, \textbf{19 sur 19 réussissent} aujourd'hui.}}
+
+\vspace{0.2em}
+{\small\tableofcontents}
+
+% ================================================================
+\section{Contexte et périmètre}
+
+\textbf{L'application.} Une boutique en ligne pour un torréfacteur fictif : six cafés d'origine (Inde,
+Brésil, Éthiopie\ldots) et du matériel d'extraction. Les clients créent un compte, commandent, suivent leurs
+commandes et laissent des avis ; un administrateur gère commandes, prix, stocks et clients.
+
+\textbf{Données sensibles.} Comptes (e-mail, empreinte bcrypt du mot de passe, rôle), coordonnées de
+livraison (nom, téléphone, adresse), historique de commandes, et la clé de signature des jetons de session.
+
+\textbf{Technologies.} Boutique : React 19, TypeScript, Vite, Tailwind CSS, servie par nginx. API : Node.js 24,
+Express 5, jetons JWT (HS256), bcrypt. Base : PostgreSQL 17 (tables \code{users}, \code{products},
+\code{orders}, \code{order\_items}, \code{reviews}, \code{security\_events}). Livraison : Docker,
+GitHub Actions, Kubernetes (kind), Kyverno, OWASP ZAP.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.6cm and 1.15cm,
+  box/.style={draw=ink,rounded corners=2pt,minimum height=0.85cm,align=center,font=\small,fill=white},
+  arr/.style={-{Stealth[length=2mm]},thick,color=ink},
+  lbl/.style={font=\scriptsize,color=ink!70}]
+  \node[box] (user) {Navigateur\\client / admin};
+  \node[box,right=of user] (web) {\textbf{web}\\nginx (UID 101)\\×2};
+  \node[box,right=of web] (api) {\textbf{api}\\Node.js (UID 65532)\\×2};
+  \node[box,right=of api] (db) {\textbf{db}\\PostgreSQL (UID 70)};
+  \node[box,below=of api,font=\scriptsize] (sec) {Secret \code{tropicline-secrets}\\(fichiers en lecture seule)};
+  \draw[arr] (user) -- node[above=1pt,lbl]{8090} (web);
+  \draw[arr] (web) -- node[above=1pt,lbl]{3000} (api);
+  \draw[arr] (api) -- node[above=1pt,lbl]{5432} (db);
+  \draw[arr,dashed] (sec) -- (api);
+  \node[draw=cherry,dashed,rounded corners,inner sep=7pt,fit=(web)(api)(db)(sec),
+        label={[font=\scriptsize,color=cherry]below:namespace \code{tropicline} --- Pod Security restricted, refus réseau par défaut, Kyverno}] {};
+\end{tikzpicture}
+\caption{Architecture déployée et frontières de confiance. Seuls les flux fléchés sont autorisés.}
+\end{figure}
+
+\textbf{Éthique.} Toutes les attaques ont été menées uniquement contre nos propres instances locales
+(Docker Compose et cluster kind), avec des comptes et des secrets de test.
+
+% ================================================================
+\section{Modèle de menace (STRIDE)}
+
+\textbf{Actifs à protéger} : données personnelles des clients ; comptes, en particulier administrateur ;
+clé de signature des jetons ; intégrité des prix, des stocks et des commandes ; disponibilité de la
+boutique ; chaîne de livraison (dépôt, pipeline, images, cluster).
+
+\textbf{Frontières de confiance} : navigateur $\rightarrow$ nginx (Internet, non fiable) ; nginx
+$\rightarrow$ API ; API $\rightarrow$ base ; dépôt $\rightarrow$ CI $\rightarrow$ registre
+$\rightarrow$ cluster. Tout ce qui vient du navigateur (corps, paramètres, en-têtes, jeton) est contrôlé
+par l'attaquant.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{2.1cm}YL{1.1cm}Y@{}}
+\toprule
+\textbf{STRIDE} & \textbf{Menace sur Tropic Line} & \textbf{Faille} & \textbf{Contrôle en place} \\
+\midrule
+\textbf{S}poofing & Fabriquer un jeton admin avec la clé lue dans le dépôt ; deviner un mot de passe & V6 & secret à l'exécution, rotation ; verrouillage après 5 échecs \\
+\textbf{T}ampering & Modifier le prix payé ; polluer \code{Object.prototype} ; image ou action CI altérée & V2, V7 & prix lu en base ; champs nommés ; images et actions figées par empreinte, registres autorisés (Kyverno) \\
+\textbf{R}epudiation & Agir sans laisser de trace (aucun journal à l'origine) & A09 & journaux JSON corrélés, audit des actions admin \\
+\textbf{I}nformation disclosure & Injection SQL ; lire la commande d'autrui ; pile d'appels et erreurs SQL renvoyées & V1, V3, V8 & requêtes paramétrées ; contrôle de propriété ; erreurs génériques \\
+\textbf{D}enial of service & Épuiser le serveur ; verrouiller le compte d'autrui & --- & limites CPU/mémoire, quotas, corps $\leq$ 100 Ko ; verrouillage par couple adresse + compte \\
+\textbf{E}levation of privilege & S'inscrire en admin ; script volant la session d'un admin ; sortie du conteneur & V4, V5 & rôle fixé et vérifié en base ; rendu texte + CSP ; non-root, sans capacités, lecture seule \\
+\bottomrule
+\end{tabularx}
+\caption{Analyse STRIDE : menaces, failles du projet correspondantes et contrôles.}
+\end{table}
+
+% ================================================================
+\section{Failles initiales}
+
+La première version (commit \code{0a4cdf9}) contient huit failles volontaires, chacune marquée \code{Vn}
+dans le code et documentée \emph{avant} correction (emplacement, cause, impact) dans
+\code{docs/vulnerabilities.md}. Chaque impact a été démontré sur notre instance.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.6cm}L{3.2cm}L{3.7cm}YL{1.3cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Faille} & \textbf{Emplacement} & \textbf{Impact démontré} & \textbf{Gravité} \\
+\midrule
+V1 & Injection SQL & \code{/api/products?search=} & une requête \code{UNION SELECT} renvoie 7 comptes avec e-mail et empreinte du mot de passe & critique \\
+V2 & Prix fourni par le client & \code{POST /api/orders} & moulin à 165 TND acheté 0,001 TND & élevée \\
+V3 & IDOR sur les commandes & \code{GET /api/orders/:id} & un client lit nom, téléphone, adresse d'un autre & élevée \\
+V4 & Rôle choisi à l'inscription & \code{/api/auth/register} & \code{"role":"admin"} crée un administrateur & critique \\
+V5 & XSS stocké & avis produit (API + page) & un script dans un avis s'exécute chez chaque visiteur & élevée \\
+V6 & Secret dans le code & \code{config.js}, Compose & jeton admin fabriqué : 6 fiches clients lues (HTTP 200) & critique \\
+V7 & Dépendance vulnérable & lodash 4.17.11 & pollution de prototype (CVE-2019-10744) modifiant le serveur & critique \\
+V8 & Mauvaise configuration & \code{app.js} & CORS \code{*}, erreurs SQL et piles renvoyées, \code{X-Powered-By} & moyenne \\
+\bottomrule
+\end{tabularx}
+\caption{Failles de la version initiale (gravité qualitative : impact × facilité d'exploitation).}
+\end{table}
+
+% ================================================================
+\section{Cartographie de référence}
+
+Chaque faille est rattachée à l'OWASP Top 10 (édition 2025), à la CWE et à STRIDE, avec les contrôles qui
+l'ont vue.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.55cm}L{3.1cm}L{2.2cm}L{1.35cm}YYL{0.8cm}@{}}
+\toprule
+\textbf{\#} & \textbf{OWASP Top 10:2025} & \textbf{CWE} & \textbf{STRIDE} & \textbf{Analyse statique (CI)} & \textbf{ZAP (exécution)} & \textbf{Test} \\
+\midrule
+V1 & A05 Injection & CWE-89 & I & Semgrep (règle d'équipe) & \textbf{High} confirmé & 2 \\
+V2 & A06 Insecure Design & CWE-602 & T & --- & --- & 1 \\
+V3 & A01 Broken Access Control & CWE-639 & I & --- & --- & 2 \\
+V4 & A01 Broken Access Control & CWE-915, 269 & E & Semgrep (règle d'équipe) & --- & 1 \\
+V5 & A05 Injection & CWE-79 & E & Semgrep (règle d'équipe) & confirmé (persistant) & 3 \\
+V6 & A04 Cryptographic Failures & CWE-321, 798 & S & Gitleaks, Semgrep & --- (corrigée avant) & --- \\
+V7 & A03 Supply Chain Failures & CWE-1395, 1321 & T & Trivy (dépendances, image) & --- & 2 \\
+V8 & A02 Misconfiguration, A10 & CWE-209, 942, 693 & I & Semgrep (2 avertissements) & confirmé (CORS, en-têtes) & 4 \\
+\bottomrule
+\end{tabularx}
+\caption{Cartographie des failles. \og --- \fg{} : non détectée par ce moyen.}
+\end{table}
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{4.2cm}YL{4.6cm}@{}}
+\toprule
+\textbf{Contrôle} & \textbf{Ce qu'il couvre} & \textbf{Référence} \\
+\midrule
+Gitleaks (tout l'historique) & secrets dans le code et l'historique & A04, CWE-798 \\
+Semgrep (\code{p/default} + règles d'équipe) & injection, XSS, rôle lu dans la requête, secrets & A05, A01, A02 \\
+Trivy \code{fs} et \code{image} & CVE des dépendances et des paquets système, secrets dans l'image & A03, CWE-1395 \\
+Trivy \code{config}, Pod Security, Kyverno & privilèges, root, capacités, registres, limites & A02, \og restricted \fg{} (PSS) \\
+NetworkPolicies, comptes de service & mouvement latéral, exfiltration, accès à l'API Kubernetes & moindre privilège \\
+ZAP authentifié & injection et configuration à l'exécution & A05, A02 \\
+Journaux, règles de détection & attaques en cours, traçabilité & A09 \\
+\bottomrule
+\end{tabularx}
+\caption{Contrôles de la chaîne DevSecOps et références couvertes.}
+\end{table}
+
+% ================================================================
+\section{Correctifs}
+
+Méthode : (1) écrire un test de régression du point de vue de l'attaquant, exécuté contre l'application
+déployée ; (2) vérifier qu'il échoue sur la version vulnérable ; (3) corriger la \textbf{cause} ; (4)
+vérifier test, Semgrep, Trivy et ZAP ; (5) un commit par faille. Les tests tournent ensuite dans la CI
+après chaque déploiement : une faille réintroduite casse le pipeline.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.6cm}YL{4.3cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Correctif} & \textbf{Preuve} \\
+\midrule
+V1 & Requête paramétrée (\code{ILIKE \$1}) : le texte est une donnée, jamais du code ; \code{\%} et \code{\_} échappés ; 100 caractères au plus ; tri choisi dans une liste fixe. & tests 2/2 ; Semgrep ; ZAP : High disparu \\
+V2 & Prix lu dans \code{products}, prix du client ignoré (et plus envoyé) ; ligne verrouillée (\code{FOR UPDATE}) contre la double vente du dernier sachet. & test : commande à 0,001 facturée 18 TND \\
+V3 & La commande doit appartenir à l'appelant ; sinon \textbf{404}, comme une commande inexistante (ne confirme pas les numéros utilisés). & tests 2/2 \\
+V4 & Rôle toujours \code{customer} ; le rôle admin est relu \textbf{en base} à chaque requête, pas dans le jeton. Remédiation : 3 comptes déjà élevés rétrogradés. & test : compte créé \code{customer}, route admin 403 \\
+V5 & Avis affiché comme \textbf{texte} (échappé par React) ; défense en profondeur : CSP \code{script-src 'self'} sans script en ligne ; 1\,000 caractères au plus. & tests 3/3 ; navigateur : aucun script exécuté, aucune violation CSP \\
+V6 & Secrets fournis en fichiers à l'exécution, refus de démarrer sans eux ; \textbf{révoqués d'abord} (nouvelle clé, nouveau mot de passe) ; purge de l'historique préparée. & jeton forgé : 200 $\rightarrow$ 401 \\
+V7 & lodash \textbf{supprimé} ; la mise à jour du profil copie des champs nommés, type et longueur vérifiés. & test de pollution ; Trivy : 1 critique + 3 élevées $\rightarrow$ 0 \\
+V8 & CORS supprimé (même origine via nginx), \code{X-Powered-By} désactivé, en-têtes de sécurité, erreurs génériques avec identifiant de corrélation, détail dans le journal seulement. & tests 4/4 ; ZAP : 9 alertes disparues \\
+\bottomrule
+\end{tabularx}
+\caption{Correctifs (un commit par faille) et preuves.}
+\end{table}
+
+\textbf{Choix notables.} Pour V1, filtrer les apostrophes ou le mot \code{UNION} se contourne et casse des
+recherches légitimes ; la requête paramétrée supprime la cause. Pour V3, répondre 404 plutôt que 403 évite
+de révéler quels numéros existent. Pour V7, mettre lodash à jour aurait corrigé les CVE connues, mais
+fusionner tout un corps de requête reste une affectation de masse ; supprimer la dépendance retire aussi
+une surface d'attaque. Pour V4, corriger le code ne suffit pas : les comptes déjà élevés ont été
+rétrogradés.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Contrôle} & \textbf{Version vulnérable} & \textbf{Version corrigée} \\
+\midrule
+Tests de régression & 13 échecs sur 18 & \textbf{19 / 19} (lockout inclus) \\
+Semgrep & 4 \code{ERROR} (V1, V4, V5, V6) & \textbf{0 ERROR} (2 avertissements, faux positifs) \\
+Trivy, dépendances de l'API & 1 critique, 3 élevées & \textbf{0} \\
+ZAP authentifié & 1 High, 5 Medium, 3 Low & \textbf{0 High réelle}, 11 alertes sur 13 disparues \\
+Gitleaks & 3 secrets & 3 secrets \textbf{dans l'historique seulement}, déjà révoqués \\
+\bottomrule
+\end{tabularx}
+\caption{Avant / après.}
+\end{table}
+
+% ================================================================
+\section{Chaîne DevSecOps}
+
+\subsection{Conteneurs}
+Images multi-étapes ; API sur base \emph{distroless} (ni shell ni gestionnaire de paquets), utilisateur
+65532 ; boutique sur nginx non privilégié, utilisateur 101, paquets mis à jour et \code{curl} retiré. Images
+de base figées par empreinte, \code{.dockerignore} en liste blanche (pas de \code{.git}, pas de secret), code
+appartenant à root donc non modifiable par le processus. Exécution en lecture seule, sans capacité Linux,
+\code{no-new-privileges}.
+
+\subsection{Pipeline et politique de blocage}
+GitHub Actions, outils dans des images à version figée et actions figées par empreinte de commit. Chaque
+barrière publie un tableau lisible sur la page de l'exécution, et un job final les résume.
+
+\begin{table}[H]
+\small
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{4.2cm}Y@{}}
+\toprule
+\textbf{Barrière} & \textbf{Bloque sur} & \textbf{Justification} \\
+\midrule
+Secrets (Gitleaks) & toute détection, tout l'historique & un secret poussé est compromis ; valeurs caviardées \\
+Code (Semgrep) & \code{ERROR} & failles exploitables ; \code{WARNING} trop dépendant du contexte \\
+Dépendances, images (Trivy) & \code{HIGH}/\code{CRITICAL} avec correctif ; image en root & corriger coûte une mise à jour ; sans correctif, bloquer figerait tout \\
+Fichiers de déploiement & \code{HIGH}/\code{CRITICAL} & privilèges menant au nœud \\
+Déploiement de test & 22 contrôles de durcissement & contrôles binaires \\
+Tests, ZAP, détection & un test, une alerte \code{High}, une règle muette & preuve à l'exécution \\
+\bottomrule
+\end{tabularx}
+\caption{Politique de blocage (détail et exceptions datées : \code{docs/pipeline-policy.md}).}
+\end{table}
+
+Le premier passage sur GitHub a échoué comme prévu (secrets, code, dépendances, image API) et n'a rien
+publié. Une exception n'est acceptée qu'avec une justification, un responsable et une échéance ; un vrai
+secret n'est jamais mis en exception.
+
+\subsection{Secrets : révoquer d'abord, purger ensuite}
+Les secrets sont des fichiers montés (secrets Docker, Secret Kubernetes en lecture seule, clé par clé),
+générés aléatoirement au déploiement ; l'API refuse de démarrer sans eux. Après la fuite V6 : (1)
+\textbf{révocation} --- nouveau mot de passe (\code{ALTER USER}), nouvelle clé de signature, redémarrage :
+le jeton forgé passe de \textbf{200 à 401}, l'ancien mot de passe est refusé, les clients se reconnectent ;
+(2) \textbf{purge} --- \code{git filter-repo} remplace les valeurs dans tous les commits d'un miroir, vérifié
+par Gitleaks (\textbf{3 $\rightarrow$ 0}). Purger sans révoquer laisserait le secret valide dans tous les
+clones déjà faits.
+
+\subsection{Déploiement Kubernetes durci}
+Namespace en Pod Security \og restricted \fg{} ; un compte de service par composant, \textbf{aucun droit} sur
+l'API Kubernetes et aucun jeton monté ; \code{securityContext} : non-root, lecture seule, sans capacité,
+seccomp, limites ; NetworkPolicies en \textbf{refus par défaut} (web $\rightarrow$ api $\rightarrow$ db,
+DNS seulement si nécessaire, aucune sortie vers Internet) ; quatre politiques Kyverno en mode \code{Deny}
+(durcissement, limites, registres et versions explicites, secrets en fichiers). \code{verify.sh} prouve
+\textbf{22 contrôles sur le cluster en marche} : par exemple, un pod root ou une image \code{nginx:latest}
+est refusé, la boutique ne joint pas la base, l'API ne joint pas Internet.
+
+\subsection{Test dynamique authentifié}
+ZAP 2.17 se connecte comme client et envoie le jeton sur chaque requête (preuve : \code{/api/auth/me} doit
+répondre 200), importe la description OpenAPI de l'API et explore la boutique. Avant correction, il
+confirme \textbf{V1} (injection SQL, High), \textbf{V5} et \textbf{V8}. Après correction, il ne reste
+aucune alerte High réelle ; un faux positif \og Path Traversal \fg{} (confiance faible) est déclaré pour
+une seule URL et un seul paramètre, avec sa raison.
+
+\subsection{Détection à l'exécution et réponse}
+L'API écrit une ligne JSON par requête et par événement de sécurité, avec l'identifiant de corrélation de
+nginx ; e-mails masqués, ni mot de passe ni jeton. Trois règles sur 5 minutes : \textbf{brute force}
+(5 échecs sur un compte depuis une adresse $\rightarrow$ verrouillage 429), \textbf{sonde d'injection}
+(3 motifs SQL ou script), \textbf{sonde d'accès} (10 refus ou commandes inconnues). Les compteurs sont
+partagés en base entre les répliques ; des métriques Prometheus restent internes. La CI vérifie que les
+attaques du job (tests, ZAP) déclenchent les trois règles. Le plan de réponse
+(\code{docs/incident-response.md}) définit rôles, gravités P1--P3 et cinq scénarios avec commandes, dont
+la mise en quarantaine d'un pod ; il a été exercé sur le cluster.
+
+% ================================================================
+\section{Réflexion critique}
+
+\textbf{Ce que les outils voient, et ce qu'ils ne voient pas.}
+\begin{itemize}
+  \item Les règles publiques de Semgrep n'ont trouvé \textbf{aucune} des huit failles ; nos règles
+  d'équipe en trouvent quatre, mais elles ont été écrites en connaissant les failles : ce biais surestime
+  l'analyse statique. Sur un vrai projet, il faut des règles écrites avant de connaître les bugs.
+  \item V2 et V3 sont invisibles pour l'analyse statique \emph{et} pour ZAP : ce sont des failles de
+  logique métier et de contrôle d'accès. Seuls des tests qui connaissent les règles de l'application les
+  couvrent. Le DAST complète le SAST, il ne remplace ni l'un ni l'autre la revue et les tests.
+  \item Les outils produisent aussi du bruit : deux avertissements Semgrep et une alerte ZAP High étaient
+  des faux positifs. Bloquer sans tri pousserait l'équipe à désactiver les contrôles.
+\end{itemize}
+
+\textbf{Erreurs commises, et ce qu'elles ont appris.}
+\begin{itemize}
+  \item Un fichier \code{trivy.yaml} ajouté pour accélérer les scans locaux excluait \code{node\_modules}
+  \emph{aussi} dans le scan d'image : l'image de l'API passait avec la faille critique de lodash. Repéré en
+  vérifiant un résultat trop beau, corrigé. Leçon : un contrôle qui passe doit aussi être vérifié.
+  \item Les premiers compteurs de détection étaient en mémoire : avec deux répliques, trois sondes
+  réparties 2 + 1 ne déclenchaient rien. Ils sont maintenant partagés en base.
+  \item Le test V3 choisissait \og la commande d'un autre \fg{} d'après l'e-mail saisi ; ZAP avait créé
+  des commandes avec des e-mails fantaisistes, et le test a échoué à tort. Il compare maintenant les
+  comptes propriétaires.
+  \item Le verrouillage a bloqué l'administrateur pendant une démonstration : c'est son rôle, mais la
+  procédure de déblocage a été ajoutée au plan de réponse.
+\end{itemize}
+
+\textbf{Limites restantes.}
+\begin{itemize}
+  \item L'historique Git public contient encore les anciennes valeurs (révoquées, donc inutilisables) :
+  la purge est prête mais l'envoi forcé n'a pas été fait, ce qui maintient Gitleaks au rouge.
+  \item Environnement de test : pas de TLS, Secret Kubernetes non chiffré dans etcd, cluster d'un nœud ;
+  sur kind, le trafic arrive avec l'adresse du nœud, ce qui affaiblit les règles par adresse.
+  \item Pas de centralisation des journaux (SIEM) ni de tableau de bord ; pas de détection au niveau des
+  conteneurs (Falco) ; images non signées (cosign) ; feuille Google Fonts sans empreinte SRI.
+\end{itemize}
+
+\textbf{Si c'était à refaire.} Écrire le modèle de menace et les tests de régression \emph{avant} le
+code ; intégrer les tests métier au pipeline dès le premier jour ; ajouter TLS, la signature des images,
+le chiffrement des secrets au repos et un SIEM.
+
+\textbf{Déclaration d'usage d'outils d'IA.} Un assistant d'IA (Claude, Anthropic, via Claude Code) a été
+utilisé pour produire une partie du code, des configurations, des scripts, de la documentation et de ce
+rapport. Chaque résultat a été exécuté et vérifié par l'équipe sur ses propres instances (tests,
+scanners, captures du pipeline) ; l'équipe reste responsable des choix et du contenu.
+
+% ================================================================
+\appendix
+\section{Reproduire}
+{\footnotesize
+\begin{verbatim}
+bash scripts/new-secrets.sh && docker compose up -d --build   # http://localhost:8081
+bash scripts/k8s/up.sh && bash scripts/k8s/verify.sh           # cluster durci, 22 controles
+BASE_URL=http://127.0.0.1:8090 npm --prefix backend run test:security
+bash scripts/zap-scan.sh && bash scripts/demo/attack.sh       # ZAP, puis detection
+\end{verbatim}}
+Documents détaillés, dans \code{docs/} : \emph{vulnerabilities}, \emph{corrections}, \emph{pipeline-policy}, \emph{secrets}, \emph{kubernetes}, \emph{dast}, \emph{detection} et \emph{incident-response} (fichiers \code{.md}).
+
+\end{document}
