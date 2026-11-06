@@ -1,4 +1,4 @@
-# Failles initiales — Tropic Line ShopCart
+| V8 | Semgrep (2 avertissements) | **oui** — CORS ouvert, en-têtes absents, `X-Powered-By` | **corrigée** || V7 | Trivy (dépendances et image) | non | **corrigée** || V5 | Semgrep (règle d'équipe) | **oui** — XSS persistant dans une réponse JSON | **corrigée** || V4 | Semgrep (règle d'équipe) | non | **corrigée** || V3 | non | non (contrôle d'accès, demande deux comptes) | **corrigée** || V2 | non | non (logique métier) | **corrigée** || V1 | Semgrep (règle d'équipe) | **oui** — SQL Injection, risque High | **corrigée** |# Failles initiales — Tropic Line ShopCart
 
 Ce document décrit les failles **volontairement** présentes dans la première version de l'application,
 **avant toute correction** (exigence 4.2 du cahier des charges). Chaque faille est repérée dans le code
@@ -136,16 +136,18 @@ Les gravités sont des estimations qualitatives (impact × facilité d'exploitat
 
 ## Suivi des failles
 
+Toutes les failles sont corrigées, chacune dans son propre commit, avec un test de régression : `docs/corrections.md`.
+
 | # | Détectée par l'analyse statique (CI) | Confirmée à l'exécution par ZAP (`docs/dast.md`) | Statut |
 |---|---|---|---|
-| V1 | Semgrep (règle d'équipe) | **oui** — SQL Injection, risque High | ouverte |
-| V2 | non | non (logique métier) | ouverte |
-| V3 | non | non (contrôle d'accès, demande deux comptes) | ouverte |
-| V4 | Semgrep (règle d'équipe) | non | ouverte |
-| V5 | Semgrep (règle d'équipe) | **oui** — XSS persistant dans une réponse JSON | ouverte |
+| V1 | Semgrep (règle d'équipe) | **oui** — SQL Injection, risque High | **corrigée** (`docs/corrections.md`) |
+| V2 | non | non (logique métier) | **corrigée** (`docs/corrections.md`) |
+| V3 | non | non (contrôle d'accès, demande deux comptes) | **corrigée** (`docs/corrections.md`) |
+| V4 | Semgrep (règle d'équipe) | non | **corrigée** (`docs/corrections.md`) |
+| V5 | Semgrep (règle d'équipe) | **oui** — XSS persistant dans une réponse JSON | **corrigée** (`docs/corrections.md`) |
 | V6 | Gitleaks, Semgrep | — (corrigée avant le scan) | **corrigée** (`docs/secrets.md`) |
-| V7 | Trivy (dépendances et image) | non | ouverte |
-| V8 | Semgrep (2 avertissements) | **oui** — CORS ouvert, en-têtes absents, `X-Powered-By` | ouverte |
+| V7 | Trivy (dépendances et image) | non | **corrigée** (`docs/corrections.md`) |
+| V8 | Semgrep (2 avertissements) | **oui** — CORS ouvert, en-têtes absents, `X-Powered-By` | **corrigée** (`docs/corrections.md`) |
 
 ---
 

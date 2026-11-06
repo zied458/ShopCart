@@ -17,6 +17,19 @@ jobs:
       maxAlertsPerRule: 10
       scanOnlyInScope: true
 
+  # Reviewed false positives (docs/dast.md). Each one is narrowed to one URL and one parameter, with its reason.
+  # Review by 2027-01-31, as for the other exceptions in docs/pipeline-policy.md.
+  - type: alertFilter
+    alertFilters:
+      # Path Traversal (rule 6), low confidence: ZAP sets "phone" to the last URL segment ("me") and the API echoes
+      # the saved phone number back, as a profile update should. No code reads a file from request input.
+      - ruleId: 6
+        newRisk: False Positive
+        url: ".*/api/users/me$"
+        urlRegex: true
+        parameter: phone
+        parameterRegex: false
+
   # Proof that the scan is signed in: this route answers 401 without a valid token.
   - type: requestor
     name: authenticated-check

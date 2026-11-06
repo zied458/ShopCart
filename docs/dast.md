@@ -68,5 +68,40 @@ couvertes par des tests ciblés (« cette faille ne doit pas exister ») ajouté
 
 ## Après correction
 
-À compléter après les commits de correction de V1, V5 et V8 : nouveau scan, même plan, et comparaison
-alerte par alerte (le pipeline doit redevenir vert sur le job DAST).
+Même plan, même compte, sur la version corrigée (Docker Compose, 6 novembre 2026) :
+
+| Alerte | Avant | Après | Faille |
+|---|---|---|---|
+| SQL Injection | **High** | — disparue | V1 corrigée |
+| Cross-Domain Misconfiguration (CORS) | Medium ×5 | — disparue | V8 corrigée |
+| Content Security Policy (CSP) Header Not Set | Medium ×3 | — disparue | V8 / V5 |
+| Missing Anti-clickjacking Header | Medium ×3 | — disparue | V8 |
+| Server Leaks Information via "X-Powered-By" | Low ×5 | — disparue | V8 corrigée |
+| X-Content-Type-Options Header Missing | Low ×5 | — disparue | V8 corrigée |
+| Cross Site Scripting Weakness (Persistent in JSON Response) | Low | Low, **confiance faible** | V5 : voir ci-dessous |
+| Sub Resource Integrity Attribute Missing | Medium | Medium | accepté : voir ci-dessous |
+| HTTP Only Site | Medium | Medium | environnement de test sans TLS |
+| Path Traversal | — | High, **confiance faible** → **faux positif** | voir ci-dessous |
+
+**Résultat : 0 alerte High réelle** (11 alertes Medium/Low sur 13 ont disparu).
+
+### Alertes restantes, examinées une par une
+
+- **Path Traversal (High, confiance faible) — faux positif.** ZAP a remplacé `phone` par le dernier segment
+  de l'URL (`me`) et l'API a renvoyé le numéro enregistré, ce qui est le comportement attendu d'une mise à jour
+  de profil. Aucun code ne lit de fichier à partir d'une entrée de requête. Déclaré dans `zap/plan.yaml`
+  (`alertFilter`), limité à cette URL et à ce paramètre, avec la raison et une date de revue : une vraie
+  traversée ailleurs serait toujours signalée.
+- **XSS « Persistent in JSON Response » (Low, confiance faible).** ZAP constate que le texte d'un avis est
+  renvoyé tel quel dans la réponse JSON — c'est voulu : l'avis est une donnée texte. Le risque est neutralisé
+  là où il se trouvait : la boutique l'affiche comme texte, la CSP interdit les scripts en ligne, et l'API
+  répond en `application/json` avec `nosniff` et une CSP `default-src 'none'`. ZAP précise lui-même :
+  « Content-Type is not HTML ».
+- **Sub Resource Integrity Attribute Missing** : la feuille de style Google Fonts n'a pas d'empreinte SRI
+  (Google la génère selon le navigateur, une empreinte fixe la casserait). Risque accepté ; la solution
+  propre est d'héberger la police avec le site.
+- **HTTP Only Site** : le cluster de test est en HTTP ; en production, TLS sur l'Ingress et
+  `Strict-Transport-Security`.
+
+Les failles V2, V3 et V4 (invisibles pour ZAP) sont couvertes par les tests de régression
+(`docs/corrections.md`), exécutés dans le même job de la CI que le scan.
