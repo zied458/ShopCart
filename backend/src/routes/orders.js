@@ -68,9 +68,13 @@ orders.get('/mine', requireAuth, async (req, res) => {
   res.json({ orders: await Promise.all(rows.map((r) => loadOrder(r.id))) })
 })
 
-// V3: any signed-in user can read any order by its number (IDOR), including name, phone and address.
+// V3 fixed: an order is returned only to the customer who placed it. Someone else's order answers 404, like
+// an order that does not exist, so the response does not even confirm that the number is in use.
+// Admins read orders through /api/admin/orders.
 orders.get('/:id', requireAuth, async (req, res) => {
-  const order = await loadOrder(Number(req.params.id))
-  if (!order) return res.status(404).json({ error: 'No such order.' })
-  res.json({ order })
+  const id = Number(req.params.id)
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(404).json({ error: 'No such order.' })
+  const owned = await query('SELECT 1 FROM orders WHERE id = $1 AND user_id = $2', [id, req.user.sub])
+  if (!owned.rowCount) return res.status(404).json({ error: 'No such order.' })
+  res.json({ order: await loadOrder(id) })
 })
