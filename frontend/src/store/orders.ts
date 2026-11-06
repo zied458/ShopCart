@@ -1,7 +1,6 @@
 import { api } from '@/lib/api'
 import type { Grind } from '@/data/products'
 import type { CartLine } from './cart'
-import { findProduct } from '@/data/products'
 
 export type OrderStatus = 'Roasting Tuesday' | 'Posted' | 'Delivered' | 'Cancelled'
 
@@ -33,8 +32,8 @@ export function itemLabel(i: Pick<OrderItem, 'kind' | 'country' | 'name'>) {
 }
 
 export async function placeOrder(delivery: Delivery, lines: CartLine[]) {
-  // The browser sends the price it shows (see docs/vulnerabilities.md, V2).
-  const items = lines.map((l) => ({ slug: l.slug, grind: l.grind ?? null, qty: l.qty, price: findProduct(l.slug)?.price }))
+  // Only what the customer chose: the server sets the price from the catalogue.
+  const items = lines.map((l) => ({ slug: l.slug, grind: l.grind ?? null, qty: l.qty }))
   const { order } = await api<{ order: Order }>('/orders', { method: 'POST', body: { ...delivery, items } })
   return order
 }
