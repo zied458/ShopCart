@@ -17,6 +17,7 @@ LABEL org.opencontainers.image.title="tropicline-web" \
 # Where nginx forwards /api; overridden per environment (Compose service name, Kubernetes service).
 ENV API_UPSTREAM=http://api:3000
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 # Apply Alpine security fixes released after the base image, and drop curl (nothing uses it).
 USER root

@@ -41,9 +41,11 @@ products.get('/:slug/reviews', async (req, res) => {
 
 products.post('/:slug/reviews', requireAuth, async (req, res) => {
   const rating = Number(req.body?.rating)
-  // V5: the review text is stored as sent, HTML included; the shop renders it as HTML (stored XSS).
+  // V5 fixed: the review is stored as plain text and the shop renders it as text (frontend/src/pages/Product.tsx),
+  // never as HTML. The shop's Content-Security-Policy blocks inline scripts as a second line of defence.
   const body = String(req.body?.body ?? '').trim()
   if (!body || !(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'A rating from 1 to 5 and a review are required.' })
+  if (body.length > 1000) return res.status(400).json({ error: 'Keep the review under 1,000 characters.' })
   const product = await query('SELECT id FROM products WHERE slug = $1', [req.params.slug])
   if (!product.rows[0]) return res.status(404).json({ error: 'No such product.' })
   const { rows } = await query(

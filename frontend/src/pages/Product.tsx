@@ -213,8 +213,9 @@ function Reviews({ slug }: { slug: string }) {
               <p className="tabular text-small text-muted">
                 {r.author} · {new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {r.rating} of 5
               </p>
-              {/* V5: the review is inserted as HTML so line breaks and bold survive; this runs any script it carries. */}
-              <p className="mt-1" dangerouslySetInnerHTML={{ __html: r.body }} />
+              {/* V5 fixed: the review is plain text. React escapes it, so markup shows as characters and never runs;
+                  whitespace-pre-line keeps the customer's line breaks. */}
+              <p className="mt-1 whitespace-pre-line">{r.body}</p>
             </li>
           ))}
         </ul>
