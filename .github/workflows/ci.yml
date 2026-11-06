@@ -286,4 +286,3 @@ jobs:
           tags: |
             ${{ steps.name.outputs.image }}:${{ github.sha }}
             ${{ steps.name.outputs.image }}:main
-
