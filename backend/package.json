@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "start": "node src/server.js",
-    "db:init": "node --env-file-if-exists=.env db/init.js"
+    "db:init": "node --env-file-if-exists=.env db/init.js",
+    "test:security": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
