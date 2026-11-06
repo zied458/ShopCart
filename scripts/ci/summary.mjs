@@ -180,16 +180,18 @@ function report(dir) {
     ['dependencies', 'Dependencies', 'Trivy fs', sum(find('dependencies.json'), trivy), 'HIGH/CRITICAL with a fix'],
     ['iac', 'Deployment files', 'Trivy config', sum(find('iac.json'), config), 'HIGH/CRITICAL'],
     ['image', 'Images', 'Trivy image (api + web)', sum(find('image.json'), trivy), 'HIGH/CRITICAL with a fix, secrets, root user'],
-    ['dast', 'Deployment + DAST', 'kind + Kyverno + ZAP', zapResult, 'failed hardening check, High alert'],
+    ['dast', 'Deployment + DAST', 'kind + Kyverno + regression tests + ZAP', zapResult, 'failed hardening check or test, High alert'],
   ]
   const icon = { success: '✅ passed', failure: '❌ failed', cancelled: '⚪ cancelled', skipped: '⏭️ skipped' }
   const findings = (found) => (found ? `${found.total}${found.blocking ? ` (${found.blocking} blocking)` : ''}` : '—')
+  const testsFile = find('tests.md')[0]
+  const testsLine = testsFile && readFileSync(testsFile, 'utf8').match(/(All \d+ tests passed|\d+ of \d+ tests failed)/)?.[1]
   const k8sLine = k8sText.match(/\*\*(All \d+ checks passed|\d+ of \d+ checks failed)\*\*/)?.[1]
   const rows = gates.map(([id, gate, tool, found, rule]) => [
     `**${gate}**`,
     tool,
     icon[needs[id]?.result] ?? '—',
-    id === 'dast' ? [k8sLine && `Kubernetes: ${k8sLine.toLowerCase()}`, found && `ZAP: ${findings(found)} alerts`].filter(Boolean).join(' · ') || '—' : findings(found),
+    id === 'dast' ? [k8sLine && `Kubernetes: ${k8sLine.toLowerCase()}`, testsLine && `Tests: ${testsLine.toLowerCase()}`, found && `ZAP: ${findings(found)} alerts`].filter(Boolean).join(' · ') || '—' : findings(found),
     rule,
   ])
   const failed = Object.values(needs).filter((n) => n.result === 'failure').length

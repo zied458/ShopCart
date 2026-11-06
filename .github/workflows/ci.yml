@@ -201,6 +201,17 @@ jobs:
         run: bash scripts/k8s/up.sh
       - name: Check the hardening on the live cluster
         run: bash scripts/k8s/verify.sh
+      - name: Security regression tests (one per planted flaw)
+        if: success() || failure()
+        run: |
+          mkdir -p reports
+          BASE_URL=http://127.0.0.1:8090 node --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=./scripts/ci/md-reporter.mjs --test-reporter-destination=reports/tests.md \
+            "backend/test/*.test.mjs"
+      - name: Tests summary
+        if: success() || failure()
+        run: cat reports/tests.md >> "$GITHUB_STEP_SUMMARY"
       - name: Authenticated ZAP scan
         if: success() || failure()
         run: bash scripts/zap-scan.sh
