@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { config } from '../config.js'
+import { query } from '../db.js'
 
 export function signToken(user) {
   return jwt.sign({ sub: user.id, name: user.name, email: user.email, role: user.role }, config.jwtSecret, { expiresIn: config.jwtExpiresIn })
@@ -28,10 +29,12 @@ export function requireAuth(req, res, next) {
   next()
 }
 
-// Trusts the role written in the token. With the secret from V6, anyone can mint an admin token.
-export function requireAdmin(req, res, next) {
+// The role is checked in the database on every admin request, not taken from the token: a token stays valid
+// for days, and an account that loses the admin role (or was given it by mistake) loses access at once.
+export async function requireAdmin(req, res, next) {
   req.user = readToken(req)
   if (!req.user) return res.status(401).json({ error: 'Sign in first.' })
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admins only.' })
+  const { rows } = await query('SELECT role FROM users WHERE id = $1', [req.user.sub])
+  if (rows[0]?.role !== 'admin') return res.status(403).json({ error: 'Admins only.' })
   next()
 }

@@ -12,8 +12,9 @@ auth.post('/register', async (req, res) => {
   if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password are required.' })
   if (String(password).length < 10) return res.status(400).json({ error: 'Use at least 10 characters for the password.' })
 
-  // V4: the role is read from the request body, so a visitor can register as admin.
-  const role = req.body.role ?? 'customer'
+  // V4 fixed: every new account is a customer. The role is never read from the request; admins are made
+  // in the database by an existing admin.
+  const role = 'customer'
 
   const exists = await query('SELECT 1 FROM users WHERE email = $1', [email])
   if (exists.rowCount) return res.status(409).json({ error: 'An account with this email already exists.' })
