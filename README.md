@@ -1,8 +1,8 @@
 # Tropic Line — ShopCart (projet DevSecOps)
 
 Online shop for a fictional coffee roaster, built to be secured across its whole life cycle for the
-ING-5-SSIR DevSecOps project. **It still contains deliberate flaws** (V1–V5, V7, V8; V6 is fixed): see
-[docs/vulnerabilities.md](docs/vulnerabilities.md). Run it only on your own machine.
+ING-5-SSIR DevSecOps project. The first commit is **deliberately vulnerable** (eight flaws, [docs/vulnerabilities.md](docs/vulnerabilities.md));
+each flaw is then fixed in its own commit, with a regression test ([docs/corrections.md](docs/corrections.md)).
 
 ```
 frontend/   React + Vite + Tailwind shop (port 5173 in dev, 4173 in preview)
@@ -57,6 +57,15 @@ bash scripts/k8s/down.sh
 
 See [docs/kubernetes.md](docs/kubernetes.md), [docs/dast.md](docs/dast.md) and [docs/secrets.md](docs/secrets.md).
 
+### Detection demo
+
+```bash
+bash scripts/demo/attack.sh      # brute force, SQL injection probes, order enumeration → alerts
+bash scripts/detections.sh       # alerts raised by the API (docs/detection.md)
+```
+
+Incident response plan: [docs/incident-response.md](docs/incident-response.md).
+
 ## Security checks
 
 ```bash
@@ -67,6 +76,10 @@ Pipeline: [.github/workflows/ci.yml](.github/workflows/ci.yml): build, secrets, 
 deployment files, images, then a hardened Kubernetes deployment scanned by ZAP. Each run page shows a
 summary table per gate and a final **Security report**. Blocking rules and exceptions:
 [docs/pipeline-policy.md](docs/pipeline-policy.md). Local reports land in `reports/`.
+
+```bash
+BASE_URL=http://localhost:8081 npm --prefix backend run test:security   # 18 security regression tests
+```
 
 ## Test accounts (local lab only)
 

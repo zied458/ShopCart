@@ -43,6 +43,8 @@ lui-même ne change pas sans revue (chaîne d'approvisionnement, OWASP A03:2025)
 | Fichiers de déploiement | Trivy `config` (Dockerfile, manifestes Kubernetes) | `HIGH` et `CRITICAL` | `MEDIUM`, `LOW` |
 | Déploiement de test | `scripts/k8s/up.sh` + `scripts/k8s/verify.sh` sur un cluster kind | échec du déploiement, ou l'un des 22 contrôles de durcissement | — |
 | Scan dynamique (DAST) | OWASP ZAP 2.17.0, authentifié, sur l'application déployée | alerte de risque `High` | `Medium`, `Low`, `Informational` |
+| Tests de régression | `backend/test/security.test.mjs` sur l'application déployée | tout test en échec (une faille revenue, ou la boutique cassée) | — |
+| Détection | `scripts/detections.sh` après les attaques du job | une des trois règles ne s'est pas déclenchée | — |
 
 ## Justification des seuils
 
@@ -80,6 +82,7 @@ fin**. À l'échéance, le contrôle bloque à nouveau automatiquement quand l'o
 | Code source | commentaire `// nosemgrep: <règle> — <raison>` sur la ligne, et un ticket | 30 jours ; revue à chaque sprint |
 | Secrets | `.gitleaksignore` (empreinte), **uniquement pour un faux positif** démontré | sans objet : un vrai secret n'est jamais exempté |
 | Fichiers de déploiement | annotation `trivy:ignore:<ID>` avec la raison | 60 jours |
+| DAST (ZAP) | `alertFilter` dans `zap/plan.yaml`, limité à une URL et un paramètre, avec la raison (faux positif démontré) | revue tous les 60 jours (prochaine : 2027-01-31) |
 
 **Un vrai secret détecté n'est jamais mis en exception.** La procédure est : **révoquer d'abord**
 (le secret est changé, l'ancien ne fonctionne plus), **purger ensuite** l'historique Git, puis vérifier
