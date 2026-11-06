@@ -1,5 +1,5 @@
 -- Tropic Line ShopCart schema. Running it drops and recreates everything.
-DROP TABLE IF EXISTS reviews, order_items, orders, products, users CASCADE;
+DROP TABLE IF EXISTS security_events, reviews, order_items, orders, products, users CASCADE;
 
 CREATE TABLE users (
   id            SERIAL PRIMARY KEY,
@@ -76,3 +76,12 @@ CREATE TABLE reviews (
 CREATE INDEX orders_user_idx ON orders(user_id);
 CREATE INDEX order_items_order_idx ON order_items(order_id);
 CREATE INDEX reviews_product_idx ON reviews(product_id);
+
+-- Hits of the detection rules (backend/src/security.js), shared by every API replica; kept one hour.
+CREATE TABLE security_events (
+  id   BIGSERIAL PRIMARY KEY,
+  rule TEXT NOT NULL,
+  key  TEXT NOT NULL,
+  at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX security_events_lookup ON security_events (rule, key, at);

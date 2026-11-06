@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { query } from '../db.js'
 import { requireAdmin } from '../middleware/auth.js'
+import { log } from '../security.js'
+
+// Audit trail: every change made with admin rights is logged with who, what and the correlation id.
+const audit = (req, action, details) => log('info', `admin.${action}`, { requestId: req.id, ip: req.ip, userId: req.user.sub, ...details })
 
 export const admin = Router()
 admin.use(requireAdmin)
@@ -21,6 +25,7 @@ admin.patch('/orders/:id', async (req, res) => {
   if (!STATUSES.includes(status)) return res.status(400).json({ error: `Status must be one of: ${STATUSES.join(', ')}.` })
   const { rows } = await query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING id, status', [status, req.params.id])
   if (!rows[0]) return res.status(404).json({ error: 'No such order.' })
+  audit(req, 'order_status_changed', { orderId: rows[0].id, status })
   res.json({ order: rows[0] })
 })
 
@@ -30,10 +35,12 @@ admin.patch('/products/:slug', async (req, res) => {
   if (!(price >= 0) || !(stock >= 0)) return res.status(400).json({ error: 'Price and stock must be zero or more.' })
   const { rows } = await query('UPDATE products SET price = $1, stock = $2 WHERE slug = $3 RETURNING slug, price, stock', [price, stock, req.params.slug])
   if (!rows[0]) return res.status(404).json({ error: 'No such product.' })
+  audit(req, 'product_updated', { slug: rows[0].slug, price, stock })
   res.json({ product: rows[0] })
 })
 
-admin.get('/customers', async (_req, res) => {
+admin.get('/customers', async (req, res) => {
+  audit(req, 'customers_viewed', {})
   const { rows } = await query(
     `SELECT u.id, u.name, u.email, u.phone, u.city, u.role, u.created_at,
             COUNT(o.id)::int AS orders, COALESCE(SUM(o.total), 0) AS spent, MAX(o.created_at) AS last_order

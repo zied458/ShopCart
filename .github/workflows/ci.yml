@@ -215,6 +215,10 @@ jobs:
       - name: Authenticated ZAP scan
         if: success() || failure()
         run: bash scripts/zap-scan.sh
+      # The tests (brute force) and ZAP (injection, access probing) just attacked the app: each rule must have fired.
+      - name: Runtime detection (alerts in the API logs)
+        if: success() || failure()
+        run: REQUIRE=brute_force,injection_probe,access_probe bash scripts/detections.sh
       - name: Cluster state (for debugging)
         if: failure()
         run: |

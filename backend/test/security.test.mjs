@@ -88,10 +88,13 @@ test('V2 · the price sent by the browser is ignored', async () => {
 
 // ---------------------------------------------------------------- V3 IDOR
 test("V3 · a customer cannot read another customer's order", async () => {
+  const token = await signIn(AMEL)
+  const me = (await call('GET', '/api/auth/me', { token })).data.user
   const all = await call('GET', '/api/admin/orders', { token: await signIn(ADMIN) })
-  const other = all.data.orders.find((o) => o.email !== AMEL.email)
+  // Another account's order (by owner, not by the e-mail typed at checkout, which a customer can set freely).
+  const other = all.data.orders.find((o) => o.user_id && o.user_id !== me.id)
   assert.ok(other, 'no order from another customer to test with')
-  const r = await call('GET', `/api/orders/${other.id}`, { token: await signIn(AMEL) })
+  const r = await call('GET', `/api/orders/${other.id}`, { token })
   assert.equal(r.status, 404, `order ${other.id} of ${other.email} answered ${r.status}`)
   assert.ok(!r.text.includes(other.phone ?? '§'), 'the other customer’s phone number is in the response')
 })
@@ -190,4 +193,17 @@ test('V8 · the shop sets anti-framing and anti-sniffing headers', async () => {
   assert.match(r.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/)
   assert.equal(r.headers.get('x-content-type-options'), 'nosniff')
   assert.ok(r.headers.get('referrer-policy'))
+})
+
+// ---------------------------------------------------------------- runtime detection (docs/detection.md)
+test('Detection · repeated failed sign-ins on one account are locked out', async () => {
+  // A throwaway address, so no real account is locked. With several API replicas each counts its own share:
+  // keep trying until one of them reaches the threshold.
+  const email = `brute-${Date.now()}@example.com`
+  const statuses = []
+  for (let i = 0; i < 20 && !statuses.includes(429); i++) {
+    statuses.push((await call('POST', '/api/auth/login', { body: { email, password: `guess-${i}` } })).status)
+  }
+  assert.ok(statuses.includes(429), `never locked out: ${statuses.join(' ')}`)
+  assert.ok(statuses.indexOf(429) >= 5, 'locked out before 5 failures')
 })

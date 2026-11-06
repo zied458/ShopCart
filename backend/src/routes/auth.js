@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { query } from '../db.js'
 import { requireAuth, signToken } from '../middleware/auth.js'
+import { isLockedOut, log, loginFailed, loginSucceeded, maskEmail } from '../security.js'
 
 export const auth = Router()
 
@@ -24,16 +25,25 @@ auth.post('/register', async (req, res) => {
     'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING *',
     [name, email, hash, role],
   )
+  log('info', 'auth.registered', { requestId: req.id, ip: req.ip, userId: rows[0].id, account: maskEmail(email) })
   res.status(201).json({ token: signToken(rows[0]), user: publicUser(rows[0]) })
 })
 
 auth.post('/login', async (req, res) => {
   const { email, password } = req.body ?? {}
-  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email])
+  // Detection response: after 5 failures on this account from this address within 5 minutes, sign-in is refused
+  // for the rest of the window, even with the right password (docs/detection.md, rule brute_force).
+  if (await isLockedOut(req, email)) {
+    log('warn', 'auth.locked_out', { requestId: req.id, ip: req.ip, account: maskEmail(email) })
+    return res.status(429).set('Retry-After', '300').json({ error: 'Too many failed attempts. Try again in a few minutes.' })
+  }
+  const { rows } = await query('SELECT * FROM users WHERE email = $1', [String(email ?? '')])
   const user = rows[0]
   if (!user || !(await bcrypt.compare(String(password ?? ''), user.password_hash))) {
+    await loginFailed(req, email)
     return res.status(401).json({ error: 'Email or password is wrong.' })
   }
+  await loginSucceeded(req, email)
   res.json({ token: signToken(user), user: publicUser(user) })
 })
 

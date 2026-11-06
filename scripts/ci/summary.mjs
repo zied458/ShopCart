@@ -155,7 +155,7 @@ function zap(path) {
       `## 🕷️ Dynamic scan — OWASP ZAP, authenticated, on the deployed app`,
       verdict(blocking, `High-risk alert${blocking === 1 ? '' : 's'}`),
       alerts.length ? [3, 2, 1, 0].map((r) => [r, alerts.filter((a) => +a.riskcode === r).length]).filter(([, n]) => n).map(([r, n]) => `${RISK[r]}: **${n}**`).join(' · ') : '',
-      confirmed.length ? `\n**Planted flaws confirmed at runtime:** ${confirmed.join(', ')} (docs/vulnerabilities.md)` : '',
+      confirmed.length ? `\n**Alerts linked to a planted flaw:** ${confirmed.join(', ')} (docs/vulnerabilities.md, docs/dast.md)` : '',
       table(['Risk', 'Alert', 'Count', 'Example request', 'Attack', 'Flaw'], rows),
       `\n<sub>Signed in as a customer (Bearer token on every request); routes from \`zap/openapi.yaml\` plus a crawl of the shop. Blocks on High; Medium is reported. Full report: artifact **dast-report**.</sub>`,
     ],
@@ -180,10 +180,12 @@ function report(dir) {
     ['dependencies', 'Dependencies', 'Trivy fs', sum(find('dependencies.json'), trivy), 'HIGH/CRITICAL with a fix'],
     ['iac', 'Deployment files', 'Trivy config', sum(find('iac.json'), config), 'HIGH/CRITICAL'],
     ['image', 'Images', 'Trivy image (api + web)', sum(find('image.json'), trivy), 'HIGH/CRITICAL with a fix, secrets, root user'],
-    ['dast', 'Deployment + DAST', 'kind + Kyverno + regression tests + ZAP', zapResult, 'failed hardening check or test, High alert'],
+    ['dast', 'Deployment + DAST', 'kind + Kyverno + regression tests + ZAP + detection', zapResult, 'failed hardening check or test, High alert, undetected attack'],
   ]
   const icon = { success: '✅ passed', failure: '❌ failed', cancelled: '⚪ cancelled', skipped: '⏭️ skipped' }
   const findings = (found) => (found ? `${found.total}${found.blocking ? ` (${found.blocking} blocking)` : ''}` : '—')
+  const detFile = find('detections.md')[0]
+  const detLine = detFile && readFileSync(detFile, 'utf8').match(/(\d+ alerts? raised|Not detected:[^(]*)/)?.[1]
   const testsFile = find('tests.md')[0]
   const testsLine = testsFile && readFileSync(testsFile, 'utf8').match(/(All \d+ tests passed|\d+ of \d+ tests failed)/)?.[1]
   const k8sLine = k8sText.match(/\*\*(All \d+ checks passed|\d+ of \d+ checks failed)\*\*/)?.[1]
@@ -191,7 +193,7 @@ function report(dir) {
     `**${gate}**`,
     tool,
     icon[needs[id]?.result] ?? '—',
-    id === 'dast' ? [k8sLine && `Kubernetes: ${k8sLine.toLowerCase()}`, testsLine && `Tests: ${testsLine.toLowerCase()}`, found && `ZAP: ${findings(found)} alerts`].filter(Boolean).join(' · ') || '—' : findings(found),
+    id === 'dast' ? [k8sLine && `Kubernetes: ${k8sLine.toLowerCase()}`, testsLine && `Tests: ${testsLine.toLowerCase()}`, found && `ZAP: ${findings(found)} alerts`, detLine && `Detection: ${detLine.trim()}`].filter(Boolean).join(' · ') || '—' : findings(found),
     rule,
   ])
   const failed = Object.values(needs).filter((n) => n.result === 'failure').length
@@ -202,7 +204,7 @@ function report(dir) {
       `# 🛡️ Tropic Line — security report`,
       failed ? `**❌ ${failed} gate${failed === 1 ? '' : 's'} failed: images are not published.**` : `**✅ Every gate passed: images can be published.**`,
       table(['Gate', 'Tool', 'Result', 'Findings', 'Blocks on'], rows),
-      zapResult?.confirmed?.length ? `\nZAP confirmed at runtime: **${zapResult.confirmed.join(', ')}**.` : '',
+      zapResult?.confirmed?.length ? `\nZAP alerts linked to a planted flaw: **${zapResult.confirmed.join(', ')}**.` : '',
       `\n<sub>Each job's own summary below has the details. Policy and thresholds: docs/pipeline-policy.md. Machine-readable: artifact **security-report** (security-report.json).</sub>`,
     ],
   }
