@@ -7,12 +7,19 @@ export const products = Router()
 const COLUMNS = 'id, slug, kind, name, country, region, latitude, altitude, process, variety, harvest, notes, story, detail, price, stock, bag, image, image_alt'
 
 products.get('/', async (req, res) => {
-  const search = req.query.search ?? ''
+  const search = String(req.query.search ?? '').slice(0, 100)
+  // The sort order is chosen from a fixed list: it is never built from the request.
   const sort = req.query.sort === 'price' ? 'price ASC' : 'position ASC'
 
-  // V1: the search text is pasted into the SQL string (SQL injection).
-  const sql = `SELECT ${COLUMNS} FROM products WHERE name ILIKE '%${search}%' OR country ILIKE '%${search}%' OR region ILIKE '%${search}%' OR array_to_string(notes, ' ') ILIKE '%${search}%' ORDER BY ${sort}`
-  const { rows } = await query(sql)
+  // V1 fixed: the search text is sent to PostgreSQL as a parameter ($1), separately from the SQL, so it is
+  // always data and never code. % and _ are escaped so they are matched literally, not as wildcards.
+  const pattern = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  const { rows } = await query(
+    `SELECT ${COLUMNS} FROM products
+      WHERE name ILIKE $1 OR country ILIKE $1 OR region ILIKE $1 OR array_to_string(notes, ' ') ILIKE $1
+      ORDER BY ${sort}`,
+    [pattern],
+  )
   res.json({ products: rows })
 })
 
