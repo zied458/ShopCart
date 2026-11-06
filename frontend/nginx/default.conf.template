@@ -4,7 +4,7 @@ server {
     server_name _;
     server_tokens off;
     root /usr/share/nginx/html;
-    include /etc/nginx/snippets/security-headers.conf;
+    # Security headers: added to the shop's own responses below; /api/ responses carry the API's own headers.
 
     # Forward the API to the backend service.
     location /api/ {
@@ -17,6 +17,7 @@ server {
     }
 
     location = /healthz {
+        include /etc/nginx/snippets/security-headers.conf;
         access_log off;
         default_type text/plain;
         return 200 "ok\n";
