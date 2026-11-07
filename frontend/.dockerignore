@@ -1,6 +1,5 @@
 node_modules
 dist
-.taste-skill
 .playwright-cli
 Dockerfile
 .dockerignore
