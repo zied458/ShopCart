@@ -1,4 +1,4 @@
-import { Router } from 'express'
+ import { Router } from 'express'
 import { pool, query } from '../db.js'
 import { config } from '../config.js'
 import { optionalAuth, requireAuth } from '../middleware/auth.js'
@@ -17,6 +17,7 @@ async function loadOrder(id) {
   )
   return { ...rows[0], items: items.rows }
 }
+
 
 // Guests can order too; a signed-in customer's order is linked to their account.
 orders.post('/', optionalAuth, async (req, res) => {
