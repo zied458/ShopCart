@@ -42,9 +42,13 @@ else
 fi
 
 step "2/6 Admission control: Kyverno $KYVERNO_VERSION"
-if ! $K get namespace kyverno >/dev/null 2>&1; then
-  $K create -f "https://github.com/kyverno/kyverno/releases/download/$KYVERNO_VERSION/install.yaml" >/dev/null
-fi
+# Retried: a CI runner sometimes loses a download from GitHub. Server-side apply is safe to repeat (unlike create)
+# and has no size limit on the large Kyverno CRDs (unlike client-side apply).
+for attempt in 1 2 3; do
+  $K apply --server-side --force-conflicts -f "https://github.com/kyverno/kyverno/releases/download/$KYVERNO_VERSION/install.yaml" >/dev/null && break
+  [[ $attempt == 3 ]] && { echo "Kyverno could not be installed" >&2; exit 1; }
+  echo "Kyverno install, attempt $attempt failed: retrying in 10 s" >&2; sleep 10
+done
 $K -n kyverno rollout status deployment/kyverno-admission-controller --timeout=300s
 $K apply -f k8s/base/namespace.yaml
 $K apply -f k8s/policies/

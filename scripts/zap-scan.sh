@@ -40,7 +40,7 @@ unset TOKEN
 [[ -f reports/zap/zap-report.json ]] || { echo "ZAP produced no report (exit $status)" >&2; exit 1; }
 node scripts/ci/summary.mjs zap reports/zap/zap-report.json > reports/zap/summary.md
 [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && cat reports/zap/summary.md >> "$GITHUB_STEP_SUMMARY"
-high="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(r.site.flatMap(s=>s.alerts).filter(a=>+a.riskcode>=3).length)' reports/zap/zap-report.json)"
+high="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(r.site.flatMap(s=>s.alerts).filter(a=>+a.riskcode>=3&&+a.count>0).length)' reports/zap/zap-report.json)"
 echo; sed -n '1,8p' reports/zap/summary.md
 echo "High-risk alerts: $high (report: reports/zap/zap-report.html)"
 [[ $status -le 2 ]] || exit "$status" # 2 = the plan finished with warnings

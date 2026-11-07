@@ -137,7 +137,8 @@ function config(path) {
 function zap(path) {
   const report = read(path) ?? {}
   const alerts = []
-  for (const site of report.site ?? []) for (const a of site.alerts ?? []) alerts.push(a)
+  // An alert whose every instance was filtered as a false positive (zap/plan.yaml) stays listed with count 0: skip it.
+  for (const site of report.site ?? []) for (const a of site.alerts ?? []) if (Number(a.count) > 0) alerts.push(a)
   const RISK = { 3: '🟥 High', 2: '🟧 Medium', 1: '🟨 Low', 0: '⬜ Info' }
   alerts.sort((a, b) => Number(b.riskcode) - Number(a.riskcode) || Number(b.count) - Number(a.count))
   const blocking = alerts.filter((a) => Number(a.riskcode) >= 3).length
